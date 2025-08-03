@@ -94,7 +94,7 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
       console.log('🔄 Starting Supabase save process...')
 
       // For now, we'll use a mock user ID since auth isn't implemented yet
-      const mockUserId = '00000000-0000-0000-0000-000000000000'
+      const mockUserId = '96e65406-f077-4709-8671-2f092c9f7bfb'
 
       // Create project
       console.log('📝 Creating project in database...')
