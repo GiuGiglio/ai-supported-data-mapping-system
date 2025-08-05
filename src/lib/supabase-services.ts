@@ -1,4 +1,4 @@
-import { supabase, Project, FieldMapping, ProductData, ValueList, MappingHistory } from './supabase'
+import { supabase, Project, FieldMapping, ProductData, ValueList, MappingHistory, TargetField } from './supabase'
 
 // Helper function to check if Supabase is available
 const checkSupabase = () => {
@@ -544,6 +544,54 @@ export const fileUploadService = {
     } catch (error) {
       console.error('Error in deleteFile:', error)
       return false
+    }
+  }
+}
+
+// Target Fields Services
+export const targetFieldService = {
+  // Get all target fields
+  async getTargetFields(): Promise<TargetField[]> {
+    if (!checkSupabase()) return []
+    
+    try {
+      const { data, error } = await supabase!
+        .from('target_fields')
+        .select('*')
+        .order('field_name', { ascending: true })
+
+      if (error) {
+        console.error('Error fetching target fields:', error)
+        return []
+      }
+
+      return data || []
+    } catch (error) {
+      console.error('Error in getTargetFields:', error)
+      return []
+    }
+  },
+
+  // Create target field
+  async createTargetField(fieldName: string): Promise<TargetField | null> {
+    if (!checkSupabase()) return null
+    
+    try {
+      const { data, error } = await supabase!
+        .from('target_fields')
+        .insert({ field_name: fieldName })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error creating target field:', error)
+        return null
+      }
+
+      return data
+    } catch (error) {
+      console.error('Error in createTargetField:', error)
+      return null
     }
   }
 } 

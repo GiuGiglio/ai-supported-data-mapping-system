@@ -3,19 +3,23 @@
 import { useState } from 'react'
 import { FileUpload } from '@/components/FileUpload'
 import { SupabaseDataViewer } from '@/components/SupabaseDataViewer'
+import { FieldMapping } from '@/components/FieldMapping'
 import { Button } from '@/components/ui/button'
-import { Download, Eye, EyeOff, Database } from 'lucide-react'
+import { Download, Eye, EyeOff, Database, ArrowRight } from 'lucide-react'
+import { FieldMappingResult } from '@/lib/ai-field-mapping'
 
 interface ProcessedData {
   data: any[]
   fileName: string
   projectId: string
   timestamp: Date
+  mappings?: FieldMappingResult[]
 }
 
 export default function Home() {
   const [processedFiles, setProcessedFiles] = useState<ProcessedData[]>([])
   const [showData, setShowData] = useState<{ [key: string]: boolean }>({})
+  const [showMapping, setShowMapping] = useState<{ [key: string]: boolean }>({})
   const [showSupabaseViewer, setShowSupabaseViewer] = useState(false)
 
   const handleFileProcessed = (data: any[], fileName: string, projectId: string) => {
@@ -32,6 +36,26 @@ export default function Home() {
     setShowData(prev => ({
       ...prev,
       [fileName]: !prev[fileName]
+    }))
+  }
+
+  const toggleMappingVisibility = (fileName: string) => {
+    setShowMapping(prev => ({
+      ...prev,
+      [fileName]: !prev[fileName]
+    }))
+  }
+
+  const handleMappingComplete = (fileName: string, mappings: FieldMappingResult[]) => {
+    setProcessedFiles(prev => prev.map(file => 
+      file.fileName === fileName 
+        ? { ...file, mappings }
+        : file
+    ))
+    // Auto-hide mapping after completion
+    setShowMapping(prev => ({
+      ...prev,
+      [fileName]: false
     }))
   }
 
@@ -125,6 +149,15 @@ export default function Home() {
                       
                       <div className="flex items-center space-x-2">
                         <Button
+                          variant={processedFile.mappings ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => toggleMappingVisibility(processedFile.fileName)}
+                        >
+                          <ArrowRight className="h-4 w-4 mr-2" />
+                          {processedFile.mappings ? 'View Mapping' : 'Map Fields'}
+                        </Button>
+
+                        <Button
                           variant="outline"
                           size="sm"
                           onClick={() => toggleDataVisibility(processedFile.fileName)}
@@ -153,6 +186,39 @@ export default function Home() {
                       </div>
                     </div>
 
+                    {/* Field Mapping */}
+                    {showMapping[processedFile.fileName] && (
+                      <div className="mt-6">
+                        <FieldMapping
+                          sourceData={processedFile.data}
+                          projectId={processedFile.projectId}
+                          onMappingComplete={(mappings) => handleMappingComplete(processedFile.fileName, mappings)}
+                        />
+                      </div>
+                    )}
+
+                    {/* Mapping Status */}
+                    {processedFile.mappings && (
+                      <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-green-800 font-medium">
+                            ✅ Field mapping completed ({processedFile.mappings.length} fields mapped)
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowMapping(prev => ({
+                              ...prev,
+                              [processedFile.fileName]: true
+                            }))}
+                            className="text-green-700 hover:text-green-900"
+                          >
+                            Review Mapping
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Data Preview */}
                     {showData[processedFile.fileName] && (
                       <div className="mt-4">
@@ -177,6 +243,13 @@ export default function Home() {
                 <p className="text-sm">
                   Supported formats: Excel (.xlsx, .xls), CSV, JSON, PDF, and text files
                 </p>
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg text-left max-w-2xl mx-auto text-sm">
+                  <h4 className="font-medium text-blue-900 mb-2">AI-Powered Field Mapping</h4>
+                  <p className="text-blue-800">
+                    After uploading a file, you can use AI to automatically map your source fields to our target schema. 
+                    The system will analyze your column headers and suggest the best matches with confidence scores.
+                  </p>
+                </div>
                 <p className="text-xs text-blue-600 mt-2">
                   Files will be automatically saved to Supabase backend
                 </p>

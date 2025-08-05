@@ -70,4 +70,9 @@ export interface MappingHistory {
   target_value: string
   frequency: number
   last_used: string
+}
+
+export interface TargetField {
+  id: string
+  field_name: string
 } 
