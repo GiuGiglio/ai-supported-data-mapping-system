@@ -32,6 +32,41 @@ const ACCEPTED_FILE_TYPES = {
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 
+// Helper function to clean Excel data from empty columns and rows
+const cleanExcelData = (data: any[]): any[] => {
+  if (!data || data.length === 0) return data
+
+  return data.map(row => {
+    const cleanedRow: any = {}
+    
+    Object.keys(row).forEach(key => {
+      // Skip empty or invalid keys
+      if (!key || 
+          key.trim() === '' || 
+          key.startsWith('_EMPTY') || 
+          key.includes('__EMPTY__')) {
+        return
+      }
+      
+      // Clean the key name
+      const cleanKey = key.trim()
+      if (cleanKey && row[key] !== null && row[key] !== undefined) {
+        cleanedRow[cleanKey] = row[key]
+      }
+    })
+    
+    return cleanedRow
+  }).filter(row => {
+    // Filter out completely empty rows
+    const values = Object.values(row)
+    return values.some(value => 
+      value !== null && 
+      value !== undefined && 
+      String(value).trim() !== ''
+    )
+  })
+}
+
 export function FileUpload({ onFileProcessed }: FileUploadProps) {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
 
@@ -50,12 +85,31 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
             const workbook = XLSX.read(data, { type: 'binary' })
             const sheetName = workbook.SheetNames[0]
             const worksheet = workbook.Sheets[sheetName]
-            jsonData = XLSX.utils.sheet_to_json(worksheet)
+            jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+              defval: '',
+              blankrows: false
+            })
+            jsonData = cleanExcelData(jsonData)
           } else if (file.type.includes('excel') || file.type.includes('spreadsheet')) {
+            console.log('📊 Processing Excel file:', file.name, 'Type:', file.type)
             const workbook = XLSX.read(data, { type: 'binary' })
             const sheetName = workbook.SheetNames[0]
             const worksheet = workbook.Sheets[sheetName]
-            jsonData = XLSX.utils.sheet_to_json(worksheet)
+            console.log('📋 Sheet name:', sheetName)
+            
+            // Convert with better options to avoid empty column issues
+            jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+              defval: '',
+              blankrows: false,
+              raw: false
+            })
+            
+            console.log('🔍 Raw Excel data (first 3 rows):', jsonData.slice(0, 3))
+            console.log('🏷️ Original headers:', Object.keys(jsonData[0] || {}))
+            
+            jsonData = cleanExcelData(jsonData)
+            console.log('✨ Cleaned headers:', Object.keys(jsonData[0] || {}))
+            console.log('📊 Final data count:', jsonData.length, 'rows')
           } else if (file.type === 'application/pdf') {
             // For PDF files, we'll create a placeholder entry
             jsonData = [{
