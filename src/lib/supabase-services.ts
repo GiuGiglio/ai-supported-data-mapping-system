@@ -188,7 +188,7 @@ export const fieldMappingService = {
       // Convert from our TypeScript interface to database schema
       const dbMappings: Omit<FieldMappingDB, 'id' | 'created_at'>[] = mappings.map(mapping => ({
         project_id: mapping.project_id,
-        source_value: mapping.source_field,  // Convert source_field to source_value for DB
+        source_field: mapping.source_field,  // Use source_field directly
         target_field: mapping.target_field,
         confidence_score: mapping.confidence_score,
         is_manual: mapping.is_manual
@@ -214,7 +214,7 @@ export const fieldMappingService = {
       const convertedData: FieldMapping[] = (data || []).map((dbMapping: any) => ({
         id: dbMapping.id,
         project_id: dbMapping.project_id,
-        source_field: dbMapping.source_value,  // Convert source_value back to source_field
+        source_field: dbMapping.source_field,  // Use source_field directly
         target_field: dbMapping.target_field,
         confidence_score: dbMapping.confidence_score,
         is_manual: dbMapping.is_manual,
@@ -248,7 +248,7 @@ export const fieldMappingService = {
       const convertedData: FieldMapping[] = (data || []).map((dbMapping: any) => ({
         id: dbMapping.id,
         project_id: dbMapping.project_id,
-        source_field: dbMapping.source_value,  // Convert source_value to source_field
+        source_field: dbMapping.source_field,  // Use source_field directly
         target_field: dbMapping.target_field,
         confidence_score: dbMapping.confidence_score,
         is_manual: dbMapping.is_manual,

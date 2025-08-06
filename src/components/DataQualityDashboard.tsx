@@ -553,9 +553,36 @@ export function DataQualityDashboard({ processedFiles }: DataQualityDashboardPro
                 </div>
               </td>
               <td className="p-3">
-                <span className="text-sm font-medium text-blue-600">
-                  {field.targetField}
-                </span>
+                {!field.isRequired && editingField === `target-${field.fieldName}` ? (
+                  <div className="flex gap-2">
+                    <Input
+                      value={editingValue}
+                      onChange={(e) => setEditingValue(e.target.value)}
+                      className="text-sm"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveEdit(`target-${field.fieldName}`)
+                        if (e.key === 'Escape') cancelEdit()
+                      }}
+                      autoFocus
+                    />
+                    <Button size="sm" onClick={() => saveEdit(`target-${field.fieldName}`)}>
+                      Save
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={cancelEdit}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div
+                    className={`text-sm font-medium text-blue-600 ${!field.isRequired ? 'cursor-pointer hover:bg-gray-100 p-1 rounded' : ''}`}
+                    onClick={() => !field.isRequired && startEditing(`target-${field.fieldName}`, field.targetField)}
+                  >
+                    {field.targetField}
+                    {!field.isRequired && (
+                      <span className="text-xs text-gray-400 ml-1">(click to edit)</span>
+                    )}
+                  </div>
+                )}
               </td>
               <td className="p-3">
                 <span className={`text-sm ${getConfidenceColor(field.confidence)}`}>

@@ -478,20 +478,33 @@ Return the mapping results in the specified JSON format with exactly ${sourceFie
       })
     }
 
-    // Ensure ALL source fields are mapped (NO FALLBACK - only AI decisions)
+    // CRITICAL: Check for exact matches first before adding as optional
     for (const sourceField of sourceFields) {
       if (!results.find(r => r.sourceField === sourceField)) {
-        console.log(`📝 Adding unmapped source field as optional: ${sourceField}`)
+        // Check if this source field has an exact match in target fields
+        const exactMatch = targetFields.find(tf => tf.field_name === sourceField)
         
-        // NO FALLBACK MATCHING - keep as optional with original name
-        results.push({
-          sourceField,
-          targetField: sourceField,
-          confidence: 0.5,
-          reason: 'AI did not map this field - kept as optional',
-          isRequired: false,
-          isOptional: true
-        })
+        if (exactMatch) {
+          console.log(`🎯 Found exact match: "${sourceField}" → "${exactMatch.field_name}" (100% confidence)`)
+          results.push({
+            sourceField,
+            targetField: exactMatch.field_name,
+            confidence: 1.0,
+            reason: 'Exact match found in target fields',
+            isRequired: true,
+            isOptional: false
+          })
+        } else {
+          console.log(`📝 Adding unmapped source field as optional: ${sourceField}`)
+          results.push({
+            sourceField,
+            targetField: sourceField,
+            confidence: 0.5,
+            reason: 'AI did not map this field - kept as optional',
+            isRequired: false,
+            isOptional: true
+          })
+        }
       }
     }
 

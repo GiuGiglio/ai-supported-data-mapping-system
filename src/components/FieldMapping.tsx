@@ -27,6 +27,14 @@ export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappi
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [duplicates, setDuplicates] = useState<Record<string, string[]>>({})
+  const [editableSourceData, setEditableSourceData] = useState<any[]>([])
+  
+  // Initialize editable source data
+  useEffect(() => {
+    if (sourceData && sourceData.length > 0) {
+      setEditableSourceData([...sourceData])
+    }
+  }, [sourceData])
 
   // Categorize mappings into required and optional with duplicate detection
   const categorizedMappings = React.useMemo(() => {
@@ -61,33 +69,53 @@ export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappi
       }
     })
     
+    // Also check for source field duplicates
+    const sourceFieldDuplicates: Record<string, string[]> = {}
+    const allSourceFields = [...requiredMappings, ...optionalMappings].map(m => m.sourceField)
+    allSourceFields.forEach(sourceField => {
+      const duplicates = allSourceFields.filter(f => f === sourceField)
+      if (duplicates.length > 1) {
+        sourceFieldDuplicates[sourceField] = duplicates
+        console.log(`🔍 Source field duplicate detected: "${sourceField}" appears ${duplicates.length} times`)
+      }
+    })
+    
     if (Object.keys(targetFieldDuplicates).length > 0) {
       console.warn('⚠️ Target field duplicates detected:', targetFieldDuplicates)
-    } else {
-      console.log('✅ No target field duplicates found')
     }
+    if (Object.keys(sourceFieldDuplicates).length > 0) {
+      console.warn('⚠️ Source field duplicates detected:', sourceFieldDuplicates)
+    }
+    if (Object.keys(targetFieldDuplicates).length === 0 && Object.keys(sourceFieldDuplicates).length === 0) {
+      console.log('✅ No duplicates found')
+    }
+    
+    return { requiredMappings, optionalMappings, targetFieldDuplicates, sourceFieldDuplicates }
     
     console.log('🔍 Categorizing mappings:', {
       totalMappings: mappings.length,
       requiredMappings: requiredMappings.length,
       optionalMappings: optionalMappings.length,
       targetFieldsCount: targetFields.length,
-      targetFieldDuplicates: Object.keys(targetFieldDuplicates).length
+      targetFieldDuplicates: Object.keys(targetFieldDuplicates).length,
+      sourceFieldDuplicates: Object.keys(sourceFieldDuplicates).length
     })
-    
-    return { requiredMappings, optionalMappings, targetFieldDuplicates }
   }, [mappings, targetFields])
 
   // Extract source fields from data and detect duplicates
   useEffect(() => {
     if (sourceData && sourceData.length > 0) {
-      const fields = Object.keys(sourceData[0]).filter(key => 
-        key && typeof key === 'string' && key.trim() !== ''
+      const firstRow = sourceData[0]
+      const fields = Object.keys(firstRow).filter(key => 
+        key && typeof key === 'string' && key.trim() !== '' && !key.startsWith('_')
       )
       console.log('📊 Source fields extracted:', fields.length, fields)
       setSourceFields(fields)
       
-      // Detect duplicate values across all fields
+      // Check for duplicates stored during Excel import
+      const importDuplicates = (firstRow as any)._duplicates || {}
+      
+      // Detect duplicate values across all fields (existing logic)
       const detectedDuplicates: Record<string, string[]> = {}
       
       for (const field of fields) {
@@ -101,7 +129,14 @@ export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappi
         }
       }
       
-      setDuplicates(detectedDuplicates)
+      // Merge import duplicates with detected duplicates
+      const allDuplicates = { ...detectedDuplicates, ...importDuplicates }
+      
+      if (Object.keys(importDuplicates).length > 0) {
+        console.log('📥 Import duplicates found:', importDuplicates)
+      }
+      
+      setDuplicates(allDuplicates)
     } else {
       console.log('⚠️ No source data provided')
     }
@@ -361,6 +396,65 @@ export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappi
                 <div className="text-sm text-gray-500">
                   Source Field
                 </div>
+                
+                {/* Source Value Display/Edit */}
+                <div className="mt-2">
+                  {duplicates[mapping.sourceField] ? (
+                    // Duplicate field - show dropdown
+                    <div className="space-y-1">
+                      <div className="text-xs text-yellow-600 font-medium">
+                        ⚠️ Duplicate field - select value:
+                      </div>
+                      <Select
+                        value={`0:${editableSourceData?.[0]?.[mapping.sourceField] || ''}`}
+                        onValueChange={(indexedValue) => {
+                          // Parse the indexed value (format: "index:value")
+                          const [indexStr, value] = indexedValue.split(':', 2)
+                          const actualValue = indexedValue.includes(':') ? value : indexedValue
+                          console.log(`🔄 Updating duplicate field "${mapping.sourceField}" to:`, actualValue)
+                          setEditableSourceData(prev => {
+                            const updated = [...prev]
+                            if (updated[0]) {
+                              updated[0][mapping.sourceField] = actualValue
+                            }
+                            return updated
+                          })
+                        }}
+                      >
+                        <SelectTrigger className="w-full text-sm">
+                          <SelectValue placeholder="Select value" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {duplicates[mapping.sourceField].map((value, idx) => (
+                            <SelectItem key={idx} value={`${idx}:${String(value)}`}>
+                              {String(value)} (Option {idx + 1})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    // Regular field - show editable input
+                    <div className="space-y-1">
+                      <div className="text-xs text-gray-500">Current value:</div>
+                      <Input
+                        value={editableSourceData?.[0]?.[mapping.sourceField] || ''}
+                        onChange={(e) => {
+                          console.log(`📝 Updating field "${mapping.sourceField}" to:`, e.target.value)
+                          setEditableSourceData(prev => {
+                            const updated = [...prev]
+                            if (updated[0]) {
+                              updated[0][mapping.sourceField] = e.target.value
+                            }
+                            return updated
+                          })
+                        }}
+                        placeholder="Enter value"
+                        className="text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <ArrowRight className="h-4 w-4 text-gray-400 mx-4" />
@@ -599,9 +693,11 @@ export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappi
               <h3 className="text-lg font-semibold mb-4 text-orange-800">
                 🔍 Duplicate Values Found
               </h3>
-              {Object.entries(duplicates).map(([fieldName, values]) => 
-                renderDuplicateSelection(fieldName, values)
-              )}
+              {Object.entries(duplicates).map(([fieldName, values], index) => (
+                <div key={`duplicate-${fieldName}-${index}`}>
+                  {renderDuplicateSelection(fieldName, values)}
+                </div>
+              ))}
             </div>
           )}
         </>

@@ -453,18 +453,37 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
                 console.log('🏷️ Field names row:', fieldNamesRow)
                 console.log('📊 Values row:', valuesRow)
                 
-                // Create proper object structure
+                // Create proper object structure with duplicate handling
                 const properData: any = {}
+                const duplicateTracker: Record<string, any[]> = {}
                 
                 if (fieldNamesRow && valuesRow) {
                   fieldNamesRow.forEach((fieldName: string, index: number) => {
                     if (fieldName && fieldName.trim() !== '' && index < valuesRow.length) {
                       const value = valuesRow[index]
                       if (value !== null && value !== undefined) {
-                        properData[fieldName.trim()] = value
+                        const cleanFieldName = fieldName.trim()
+                        
+                        // Check if this field name already exists
+                        if (properData.hasOwnProperty(cleanFieldName)) {
+                          // This is a duplicate - store all values
+                          if (!duplicateTracker[cleanFieldName]) {
+                            duplicateTracker[cleanFieldName] = [properData[cleanFieldName]]
+                          }
+                          duplicateTracker[cleanFieldName].push(value)
+                          console.log(`🔍 Duplicate field detected: "${cleanFieldName}" with values:`, duplicateTracker[cleanFieldName])
+                        } else {
+                          properData[cleanFieldName] = value
+                        }
                       }
                     }
                   })
+                  
+                  // Add duplicate information to the data
+                  if (Object.keys(duplicateTracker).length > 0) {
+                    (properData as any)._duplicates = duplicateTracker
+                    console.log('📝 Stored duplicates for later processing:', duplicateTracker)
+                  }
                 }
                 
                 console.log('✅ Reconstructed proper data structure:', properData)
