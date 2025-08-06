@@ -396,21 +396,79 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
           if (file.type === 'application/json') {
             jsonData = JSON.parse(data as string)
           } else if (file.type === 'text/csv') {
-            const workbook = XLSX.read(data, { type: 'binary' })
-            const sheetName = workbook.SheetNames[0]
-            const worksheet = workbook.Sheets[sheetName]
-            jsonData = XLSX.utils.sheet_to_json(worksheet, { 
-              defval: '',
-              blankrows: false
-            })
-            const { cleanedData, fieldDescriptions } = cleanExcelData(jsonData)
-            jsonData = cleanedData
-            extractedFieldDescriptions = fieldDescriptions
+            console.log('📄 Processing CSV file...')
+            // Parse CSV manually for better control
+            const csvText = data as string
+            const lines = csvText.split('\n').filter(line => line.trim() !== '')
             
-            // Store field descriptions for AI training (if available)
-            if (fieldDescriptions && Object.keys(fieldDescriptions).length > 0) {
-              console.log('📚 Field descriptions extracted for AI training:', fieldDescriptions)
+            if (lines.length < 2) {
+              throw new Error('CSV must have at least a header row and one data row')
             }
+            
+            // Parse header row
+            const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''))
+            console.log('📋 CSV headers:', headers)
+            
+            // Parse data rows
+            jsonData = lines.slice(1).map((line, index) => {
+              const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''))
+              const row: any = {}
+              headers.forEach((header, i) => {
+                row[header] = values[i] || ''
+              })
+              return row
+            })
+            
+            console.log('✅ CSV parsed successfully:', jsonData.length, 'records')
+            extractedFieldDescriptions = {}
+          } else if (file.type === 'application/pdf') {
+            console.log('📄 Processing PDF file...')
+            // For now, mark PDF as needing manual processing
+            jsonData = [{
+              'File Name': file.name,
+              'File Type': 'PDF',
+              'Processing Status': 'Manual processing required',
+              'Instructions': 'Please extract data from PDF manually and upload as Excel/CSV'
+            }]
+            extractedFieldDescriptions = {}
+          } else if (file.type === 'text/plain') {
+            console.log('📄 Processing TXT file...')
+            const txtContent = data as string
+            
+            // Try to detect if it's structured data (tab-separated, pipe-separated, etc.)
+            const lines = txtContent.split('\n').filter(line => line.trim() !== '')
+            
+            if (lines.length < 2) {
+              // Single line or unstructured text
+              jsonData = [{
+                'Text Content': txtContent,
+                'File Name': file.name,
+                'Processing Status': 'Manual processing required'
+              }]
+            } else {
+              // Try to detect delimiter
+              const firstLine = lines[0]
+              let delimiter = '\t' // Default to tab
+              if (firstLine.includes('|')) delimiter = '|'
+              else if (firstLine.includes(';')) delimiter = ';'
+              else if (firstLine.includes(',')) delimiter = ','
+              
+              console.log('📋 TXT delimiter detected:', delimiter === '\t' ? 'TAB' : delimiter)
+              
+              // Parse as delimited text
+              const headers = lines[0].split(delimiter).map(h => h.trim())
+              jsonData = lines.slice(1).map(line => {
+                const values = line.split(delimiter).map(v => v.trim())
+                const row: any = {}
+                headers.forEach((header, i) => {
+                  row[header] = values[i] || ''
+                })
+                return row
+              })
+            }
+            
+            console.log('✅ TXT parsed successfully:', jsonData.length, 'records')
+            extractedFieldDescriptions = {}
           } else if (file.type.includes('excel') || file.type.includes('spreadsheet')) {
             console.log('📊 Processing Excel file:', file.name, 'Type:', file.type)
             const workbook = XLSX.read(data, { type: 'binary' })
@@ -817,9 +875,17 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
                   {uploadedFile.status === 'uploading' && (
                     <>
                       <div className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-                      <span className="text-sm text-blue-600">
-                        Uploading... {uploadedFile.progress}%
-                      </span>
+                      <div className="flex flex-col items-start">
+                        <span className="text-sm text-blue-600">
+                          Uploading... {uploadedFile.progress}%
+                        </span>
+                        <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-600 transition-all duration-300"
+                            style={{ width: `${uploadedFile.progress}%` }}
+                          />
+                        </div>
+                      </div>
                     </>
                   )}
                   

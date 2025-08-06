@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { FieldMappingResult } from '@/lib/ai-field-mapping'
-import { targetFieldService, type TargetField } from '@/lib/supabase-services'
+import { targetFieldService, valueListService, type TargetField, type ValueList } from '@/lib/supabase-services'
 import { aiProductNameService, type ProductNameResult } from '@/lib/ai-product-name-generation'
 
 interface ProcessedData {
@@ -75,6 +75,8 @@ export function DataQualityDashboard({ processedFiles }: DataQualityDashboardPro
   const [targetFields, setTargetFields] = useState<TargetField[]>([])
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editingValue, setEditingValue] = useState<string>('')
+  const [valueLists, setValueLists] = useState<Record<string, ValueList[]>>({})
+  const [loadingValueLists, setLoadingValueLists] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [generatedProductName, setGeneratedProductName] = useState<ProductNameResult | null>(null)
   const [isGeneratingName, setIsGeneratingName] = useState(false)
@@ -372,10 +374,36 @@ export function DataQualityDashboard({ processedFiles }: DataQualityDashboardPro
     }
   }
 
+  // Load value lists for a field
+  const loadValueListForField = async (fieldName: string) => {
+    if (valueLists[fieldName] || loadingValueLists.has(fieldName)) return
+    
+    setLoadingValueLists(prev => new Set(prev).add(fieldName))
+    
+    try {
+      const lists = await valueListService.getValueLists(fieldName)
+      setValueLists(prev => ({ ...prev, [fieldName]: lists }))
+    } catch (error) {
+      console.error(`Error loading value list for ${fieldName}:`, error)
+    } finally {
+      setLoadingValueLists(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(fieldName)
+        return newSet
+      })
+    }
+  }
+
   // Handle inline editing
   const startEditing = (fieldName: string, currentValue: string) => {
     setEditingField(fieldName)
     setEditingValue(currentValue)
+    
+    // Load value lists for common attributes
+    const commonAttributes = ['Brand', 'Category', 'Material', 'Color', 'Size Category']
+    if (commonAttributes.some(attr => fieldName.toLowerCase().includes(attr.toLowerCase()))) {
+      loadValueListForField(fieldName)
+    }
   }
 
   const saveEdit = (fieldName: string) => {
@@ -516,16 +544,37 @@ export function DataQualityDashboard({ processedFiles }: DataQualityDashboardPro
                 <div className="max-w-xs">
                   {editingField === field.fieldName ? (
                     <div className="flex gap-2">
-                      <Input
-                        value={editingValue}
-                        onChange={(e) => setEditingValue(e.target.value)}
-                        className="text-sm"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') saveEdit(field.fieldName)
-                          if (e.key === 'Escape') cancelEdit()
-                        }}
-                        autoFocus
-                      />
+                      {valueLists[field.fieldName] && valueLists[field.fieldName].length > 0 ? (
+                        <Select
+                          value={editingValue}
+                          onValueChange={setEditingValue}
+                        >
+                          <SelectTrigger className="text-sm">
+                            <SelectValue placeholder="Select value" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={editingValue}>
+                              {editingValue || 'Current value'}
+                            </SelectItem>
+                            {valueLists[field.fieldName].map((valueList) => (
+                              <SelectItem key={valueList.id} value={valueList.value_text}>
+                                {valueList.value_text}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          className="text-sm"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveEdit(field.fieldName)
+                            if (e.key === 'Escape') cancelEdit()
+                          }}
+                          autoFocus
+                        />
+                      )}
                       <Button size="sm" onClick={() => saveEdit(field.fieldName)}>
                         Save
                       </Button>
