@@ -4,8 +4,9 @@ import { useState } from 'react'
 import { FileUpload } from '@/components/FileUpload'
 import { SupabaseDataViewer } from '@/components/SupabaseDataViewer'
 import { FieldMapping } from '@/components/FieldMapping'
+import { DataQualityDashboard } from '@/components/DataQualityDashboard'
 import { Button } from '@/components/ui/button'
-import { Download, Eye, EyeOff, Database, ArrowRight } from 'lucide-react'
+import { Download, Eye, EyeOff, Database, ArrowRight, BarChart3 } from 'lucide-react'
 import { FieldMappingResult } from '@/lib/ai-field-mapping'
 
 interface ProcessedData {
@@ -22,6 +23,7 @@ export default function Home() {
   const [showData, setShowData] = useState<{ [key: string]: boolean }>({})
   const [showMapping, setShowMapping] = useState<{ [key: string]: boolean }>({})
   const [showSupabaseViewer, setShowSupabaseViewer] = useState(false)
+  const [showDashboard, setShowDashboard] = useState(false)
 
   const handleFileProcessed = (data: any[], fileName: string, projectId: string, fieldDescriptions?: Record<string, string>) => {
     const newProcessedFile: ProcessedData = {
@@ -95,16 +97,34 @@ export default function Home() {
         <div className="flex justify-center mb-8">
           <div className="flex space-x-1 bg-white rounded-lg p-1 shadow-sm">
             <Button
-              variant={!showSupabaseViewer ? "default" : "ghost"}
+              variant={!showSupabaseViewer && !showDashboard ? "default" : "ghost"}
               size="sm"
-              onClick={() => setShowSupabaseViewer(false)}
+              onClick={() => {
+                setShowSupabaseViewer(false)
+                setShowDashboard(false)
+              }}
             >
               Upload Files
             </Button>
             <Button
+              variant={showDashboard ? "default" : "ghost"}
+              size="sm"
+              onClick={() => {
+                setShowDashboard(true)
+                setShowSupabaseViewer(false)
+              }}
+              className="flex items-center"
+            >
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Quality Dashboard
+            </Button>
+            <Button
               variant={showSupabaseViewer ? "default" : "ghost"}
               size="sm"
-              onClick={() => setShowSupabaseViewer(true)}
+              onClick={() => {
+                setShowSupabaseViewer(true)
+                setShowDashboard(false)
+              }}
               className="flex items-center"
             >
               <Database className="h-4 w-4 mr-2" />
@@ -114,7 +134,9 @@ export default function Home() {
         </div>
 
         {/* Content */}
-        {!showSupabaseViewer ? (
+        {showDashboard ? (
+          <DataQualityDashboard processedFiles={processedFiles} />
+        ) : !showSupabaseViewer ? (
           <>
             {/* File Upload Section */}
             <div className="mb-8">

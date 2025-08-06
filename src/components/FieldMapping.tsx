@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ArrowRight, CheckCircle, AlertCircle, RefreshCw, Save } from 'lucide-react'
-import { targetFieldService, fieldMappingService } from '@/lib/supabase-services'
+import { targetFieldService, fieldMappingService, optionalFieldService } from '@/lib/supabase-services'
 import { aiFieldMappingService, FieldMappingResult } from '@/lib/ai-field-mapping'
 import { TargetField } from '@/lib/supabase'
 
@@ -25,8 +25,56 @@ export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappi
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [duplicates, setDuplicates] = useState<Record<string, string[]>>({})
 
-  // Extract source fields from data
+  // Categorize mappings into required and optional with duplicate detection
+  const categorizedMappings = React.useMemo(() => {
+    // Use AI-determined classification if available, otherwise fall back to target field matching
+    const requiredMappings = mappings.filter(m => {
+      if (m.isRequired !== undefined) return m.isRequired
+      // Fallback: check if target field is in required list
+      const requiredFieldNames = targetFields.map(tf => tf.field_name)
+      return requiredFieldNames.includes(m.targetField)
+    })
+    
+    const optionalMappings = mappings.filter(m => {
+      if (m.isOptional !== undefined) return m.isOptional
+      // Fallback: check if target field is NOT in required list
+      const requiredFieldNames = targetFields.map(tf => tf.field_name)
+      return !requiredFieldNames.includes(m.targetField)
+    })
+    
+    // Detect target field duplicates across both categories
+    const requiredTargetFields = requiredMappings.map(m => m.targetField)
+    const optionalTargetFields = optionalMappings.map(m => m.targetField)
+    const allTargetFields = [...requiredTargetFields, ...optionalTargetFields]
+    
+    const targetFieldDuplicates: Record<string, { requiredCount: number, optionalCount: number }> = {}
+    allTargetFields.forEach(targetField => {
+      const requiredCount = requiredTargetFields.filter(f => f === targetField).length
+      const optionalCount = optionalTargetFields.filter(f => f === targetField).length
+      
+      if (requiredCount + optionalCount > 1) {
+        targetFieldDuplicates[targetField] = { requiredCount, optionalCount }
+      }
+    })
+    
+    if (Object.keys(targetFieldDuplicates).length > 0) {
+      console.warn('⚠️ Target field duplicates detected:', targetFieldDuplicates)
+    }
+    
+    console.log('🔍 Categorizing mappings:', {
+      totalMappings: mappings.length,
+      requiredMappings: requiredMappings.length,
+      optionalMappings: optionalMappings.length,
+      targetFieldsCount: targetFields.length,
+      targetFieldDuplicates: Object.keys(targetFieldDuplicates).length
+    })
+    
+    return { requiredMappings, optionalMappings, targetFieldDuplicates }
+  }, [mappings, targetFields])
+
+  // Extract source fields from data and detect duplicates
   useEffect(() => {
     if (sourceData && sourceData.length > 0) {
       const fields = Object.keys(sourceData[0]).filter(key => 
@@ -34,6 +82,22 @@ export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappi
       )
       console.log('📊 Source fields extracted:', fields.length, fields)
       setSourceFields(fields)
+      
+      // Detect duplicate values across all fields
+      const detectedDuplicates: Record<string, string[]> = {}
+      
+      for (const field of fields) {
+        const values = sourceData.map(row => row[field]).filter(val => val && val.toString().trim() !== '')
+        const uniqueValues = Array.from(new Set(values.map(v => v.toString())))
+        
+        // If we have multiple different values for the same field name, it might be duplicates
+        if (uniqueValues.length > 1) {
+          detectedDuplicates[field] = uniqueValues
+          console.log(`🔍 Potential duplicates found for "${field}":`, uniqueValues)
+        }
+      }
+      
+      setDuplicates(detectedDuplicates)
     } else {
       console.log('⚠️ No source data provided')
     }
@@ -124,15 +188,43 @@ export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappi
     setError(null)
 
     try {
-      const fieldMappings = mappings.map(mapping => ({
-        project_id: projectId,
-        source_field: mapping.sourceField,
-        target_field: mapping.targetField,
-        confidence_score: mapping.confidence,
-        is_manual: mapping.reason === 'Manual override'
-      }))
+      // Separate required and optional mappings
+      const requiredMappings = mappings.filter(m => m.isRequired)
+      const optionalMappings = mappings.filter(m => m.isOptional)
 
-      await fieldMappingService.createFieldMappings(fieldMappings)
+      console.log(`💾 Saving ${requiredMappings.length} required and ${optionalMappings.length} optional mappings`)
+
+      // Save required mappings to field_mappings table
+      if (requiredMappings.length > 0) {
+        const fieldMappings = requiredMappings.map(mapping => ({
+          project_id: projectId,
+          source_field: mapping.sourceField,
+          target_field: mapping.targetField,
+          confidence_score: mapping.confidence,
+          is_manual: mapping.reason === 'Manual override'
+        }))
+
+        await fieldMappingService.createFieldMappings(fieldMappings)
+      }
+
+      // Save optional mappings to optional_fields table
+      if (optionalMappings.length > 0) {
+        const optionalFields = optionalMappings.map(mapping => ({
+          project_id: projectId,
+          source_field: mapping.sourceField,
+          source_value: '', // Will be filled from actual data later
+          target_field: mapping.targetField === mapping.sourceField ? undefined : mapping.targetField,
+          field_type: 'text',
+          confidence_score: mapping.confidence,
+          is_mapped: mapping.targetField !== mapping.sourceField,
+          is_suggested: true,
+          suggested_target: mapping.targetField !== mapping.sourceField ? mapping.targetField : undefined,
+          reason: mapping.reason || 'AI classified as optional field'
+        }))
+
+        await optionalFieldService.createOptionalFields(optionalFields)
+      }
+
       onMappingComplete(mappings)
     } catch (error) {
       console.error('Error saving mappings:', error)
@@ -156,14 +248,226 @@ export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappi
     return 'Low'
   }
 
+  // Handle duplicate value selection
+  const handleDuplicateSelection = (fieldName: string, selectedValue: string) => {
+    console.log(`🔧 User selected value "${selectedValue}" for duplicate field "${fieldName}"`)
+    // Remove field from duplicates after selection
+    const newDuplicates = { ...duplicates }
+    delete newDuplicates[fieldName]
+    setDuplicates(newDuplicates)
+    
+    // Update the source data to use the selected value
+    // This would need to be implemented based on how you want to handle the data
+    // For now, just log the selection
+  }
+
+  // Toggle mapping between required and optional
+  const toggleMappingType = (sourceField: string) => {
+    console.log(`🔄 Toggling mapping type for: ${sourceField}`)
+    setMappings(prevMappings => 
+      prevMappings.map(mapping => {
+        if (mapping.sourceField === sourceField) {
+          return {
+            ...mapping,
+            isRequired: !mapping.isRequired,
+            isOptional: !mapping.isOptional,
+            reason: `${mapping.reason} (user toggled)`
+          }
+        }
+        return mapping
+      })
+    )
+  }
+
+  // Remove mapping completely
+  const removeMapping = (sourceField: string) => {
+    console.log(`🗑️ Removing mapping for: ${sourceField}`)
+    setMappings(prevMappings => 
+      prevMappings.filter(mapping => mapping.sourceField !== sourceField)
+    )
+  }
+
+  // Render duplicate selection UI
+  const renderDuplicateSelection = (fieldName: string, values: string[]) => (
+    <Card className="mt-4 border-orange-200 bg-orange-50">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-orange-800">
+          ⚠️ Duplicate Values Detected: {fieldName}
+        </CardTitle>
+        <p className="text-sm text-orange-600">
+          Multiple different values found for this field. Please select the correct value to use.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Bitte korrekten Wert auswählen:</p>
+          <Select onValueChange={(value) => handleDuplicateSelection(fieldName, value)}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Wählen Sie den korrekten Wert aus..." />
+            </SelectTrigger>
+            <SelectContent>
+              {values.map((value, index) => (
+                <SelectItem key={index} value={value}>
+                  {value || '(Leer)'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardContent>
+    </Card>
+  )
+
+  // Render mapping table for a category
+  const renderMappingTable = (mappings: FieldMappingResult[], title: string, isRequired: boolean) => (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          {isRequired ? (
+            <span className="text-red-600">🔴 {title} ({mappings.length}/{targetFields.length})</span>
+          ) : (
+            <span className="text-blue-600">🔵 {title} ({mappings.length})</span>
+          )}
+        </CardTitle>
+        <p className="text-sm text-gray-600">
+          {isRequired 
+            ? 'These fields are required for the system. All should be mapped.'
+            : 'These fields were mapped but don\'t match required target fields. You can adjust or remove them.'
+          }
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {mappings.map((mapping, index) => {
+            const isDuplicate = categorizedMappings.targetFieldDuplicates[mapping.targetField]
+            return (
+            <div 
+              key={`${title}-${index}`}
+              className={`flex items-center justify-between p-4 rounded-lg ${
+                isDuplicate 
+                  ? 'bg-yellow-50 border-2 border-yellow-400' 
+                  : isRequired ? 'bg-red-50 border border-red-200' : 'bg-blue-50 border border-blue-200'
+              }`}
+            >
+              {/* Source Field */}
+              <div className="flex-1">
+                <div className="font-medium text-gray-900">
+                  {mapping.sourceField}
+                </div>
+                <div className="text-sm text-gray-500">
+                  Source Field
+                </div>
+              </div>
+
+              <ArrowRight className="h-4 w-4 text-gray-400 mx-4" />
+
+              {/* Target Field Selection */}
+              <div className="flex-1">
+                <Select
+                  value={mapping.targetField}
+                  onValueChange={(value) => updateMapping(mapping.sourceField, value)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select target field" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {targetFields.map(field => (
+                      <SelectItem key={field.id} value={field.field_name}>
+                        <div className="flex items-center gap-2">
+                          <span>{field.field_name}</span>
+                          <Badge variant="outline" className="text-xs">
+                            Required
+                          </Badge>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="text-sm text-gray-500 mt-1">
+                  {isRequired ? 'Required Target Field' : 'Optional Target Field'}
+                </div>
+              </div>
+
+              {/* Confidence Badge, Duplicate Warning, and Action Buttons */}
+              <div className="ml-4 flex flex-col items-end gap-2">
+                <div className="flex gap-2 items-center">
+                  <Badge className={getConfidenceColor(mapping.confidence)}>
+                    {getConfidenceText(mapping.confidence)} ({Math.round(mapping.confidence * 100)}%)
+                  </Badge>
+                  {isDuplicate && (
+                    <Badge variant="destructive" className="text-xs">
+                      ⚠️ DUPLICATE
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500 mt-1 max-w-40 text-right">
+                  {mapping.reason}
+                  {isDuplicate && (
+                    <div className="text-yellow-600 font-medium mt-1">
+                      Target field appears in both Required ({isDuplicate.requiredCount}) and Optional ({isDuplicate.optionalCount})
+                    </div>
+                  )}
+                </div>
+                
+                {/* Action Buttons */}
+                <div className="flex gap-1 mt-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => toggleMappingType(mapping.sourceField)}
+                    className="text-xs px-2 py-1"
+                  >
+                    {isRequired ? '→ Optional' : '→ Required'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => removeMapping(mapping.sourceField)}
+                    className="text-xs px-2 py-1"
+                  >
+                    ✕ Remove
+                  </Button>
+                </div>
+              </div>
+            </div>
+            )
+          })}
+          
+          {mappings.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              No {title.toLowerCase()} mappings available.
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+
   if (sourceFields.length === 0) {
     return (
-      <Alert>
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          No source fields found in the uploaded data. Please ensure your file contains column headers.
-        </AlertDescription>
-      </Alert>
+      <div className="space-y-4">
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            No source fields found in the uploaded data. Please ensure your file contains column headers.
+          </AlertDescription>
+        </Alert>
+        
+        {/* Debug Info */}
+        <Card className="bg-gray-50">
+          <CardHeader>
+            <CardTitle className="text-sm">🔧 Debug Info</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xs space-y-1">
+              <p>Source Data Length: {sourceData?.length || 0}</p>
+              <p>Target Fields: {targetFields.length}</p>
+              <p>Mappings: {mappings.length}</p>
+              <p>Component Version: Updated with Required/Optional separation</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
@@ -226,90 +530,63 @@ export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappi
         </CardContent>
       </Card>
 
-      {/* Field Mappings */}
+      {/* Categorized Field Mappings */}
       {mappings.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Field Mappings ({mappings.length})</CardTitle>
-            <p className="text-sm text-gray-600">
-              Review and adjust the mappings below. Click on the target field dropdown to change it.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {mappings.map((mapping, index) => (
-                <div 
-                  key={index}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                >
-                  {/* Source Field */}
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">
-                      {mapping.sourceField}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      Source Field
-                    </div>
+        <>
+          {/* Overview Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Field Mappings Overview</CardTitle>
+              <p className="text-sm text-gray-600">
+                ✅ AI Mapping completed | {mappings.length} total mappings: {categorizedMappings.requiredMappings.length} required, {categorizedMappings.optionalMappings.length} optional
+              </p>
+              <p className="text-xs text-green-600">
+                Target Fields: {targetFields.length} | Source Fields: {sourceFields.length} | Component: Updated with Required/Optional separation
+              </p>
+            </CardHeader>
+            <CardContent>
+              {/* Summary */}
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <div className="flex items-center justify-between text-sm">
+                  <div>
+                    <strong>Confidence Summary:</strong>
                   </div>
-
-                  <ArrowRight className="h-4 w-4 text-gray-400 mx-4" />
-
-                  {/* Target Field Selection */}
-                  <div className="flex-1">
-                    <Select
-                      value={mapping.targetField}
-                      onValueChange={(value) => updateMapping(mapping.sourceField, value)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select target field" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {targetFields.map(field => (
-                          <SelectItem key={field.id} value={field.field_name}>
-                            {field.field_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <div className="text-sm text-gray-500 mt-1">
-                      Target Field
-                    </div>
+                  <div className="flex gap-4">
+                    <span className="text-green-700">
+                      High: {mappings.filter(m => m.confidence >= 0.8).length}
+                    </span>
+                    <span className="text-yellow-700">
+                      Medium: {mappings.filter(m => m.confidence >= 0.6 && m.confidence < 0.8).length}
+                    </span>
+                    <span className="text-red-700">
+                      Low: {mappings.filter(m => m.confidence < 0.6).length}
+                    </span>
                   </div>
-
-                  {/* Confidence Badge */}
-                  <div className="ml-4 flex flex-col items-end">
-                    <Badge className={getConfidenceColor(mapping.confidence)}>
-                      {getConfidenceText(mapping.confidence)} ({Math.round(mapping.confidence * 100)}%)
-                    </Badge>
-                    <div className="text-xs text-gray-500 mt-1 max-w-40 text-right">
-                      {mapping.reason}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Summary */}
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-              <div className="flex items-center justify-between text-sm">
-                <div>
-                  <strong>Mapping Summary:</strong>
-                </div>
-                <div className="flex gap-4">
-                  <span className="text-green-700">
-                    High Confidence: {mappings.filter(m => m.confidence >= 0.8).length}
-                  </span>
-                  <span className="text-yellow-700">
-                    Medium Confidence: {mappings.filter(m => m.confidence >= 0.6 && m.confidence < 0.8).length}
-                  </span>
-                  <span className="text-red-700">
-                    Low Confidence: {mappings.filter(m => m.confidence < 0.6).length}
-                  </span>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Required Fields Table */}
+          {renderMappingTable(categorizedMappings.requiredMappings, 'Required Fields', true)}
+
+          {/* Optional Fields Table */}
+          {categorizedMappings.optionalMappings.length > 0 && 
+            renderMappingTable(categorizedMappings.optionalMappings, 'Optional Fields', false)
+          }
+
+          {/* Duplicate Value Selection */}
+          {Object.keys(duplicates).length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-4 text-orange-800">
+                🔍 Duplicate Values Found
+              </h3>
+              {Object.entries(duplicates).map(([fieldName, values]) => 
+                renderDuplicateSelection(fieldName, values)
+              )}
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </>
       )}
 
       {/* Preview of Source Fields */}

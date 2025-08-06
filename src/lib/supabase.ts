@@ -53,11 +53,38 @@ export interface Project {
 export interface FieldMapping {
   id: string
   project_id: string
-  source_field: string
+  source_field: string  // This is what our TypeScript code uses
   target_field: string
   confidence_score: number
   is_manual: boolean
   created_at: string
+}
+
+// Database schema interface (what Supabase actually expects)
+export interface FieldMappingDB {
+  id?: string
+  project_id: string
+  source_value: string  // This is what the database expects
+  target_field: string
+  confidence_score: number
+  is_manual: boolean
+  created_at?: string
+}
+
+export interface OptionalField {
+  id: string
+  project_id: string
+  source_field: string
+  source_value: string
+  target_field?: string
+  field_type: string
+  confidence_score: number
+  is_mapped: boolean
+  is_suggested: boolean
+  suggested_target?: string
+  reason: string
+  created_at: string
+  updated_at: string
 }
 
 export interface ProductData {

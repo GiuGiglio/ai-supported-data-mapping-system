@@ -1,4 +1,4 @@
-import { supabase, Project, FieldMapping, ProductData, ValueList, MappingHistory, TargetField } from './supabase'
+import { supabase, Project, FieldMapping, FieldMappingDB, ProductData, ValueList, MappingHistory, TargetField, OptionalField } from './supabase'
 
 // Helper function to check if Supabase is available
 const checkSupabase = () => {
@@ -182,19 +182,48 @@ export const fieldMappingService = {
     if (!checkSupabase()) return []
     
     try {
+      console.log('🔄 Attempting to insert field mappings:', mappings.length, 'items')
+      console.log('📊 Sample mapping structure (before conversion):', mappings[0])
+      
+      // Convert from our TypeScript interface to database schema
+      const dbMappings: Omit<FieldMappingDB, 'id' | 'created_at'>[] = mappings.map(mapping => ({
+        project_id: mapping.project_id,
+        source_value: mapping.source_field,  // Convert source_field to source_value for DB
+        target_field: mapping.target_field,
+        confidence_score: mapping.confidence_score,
+        is_manual: mapping.is_manual
+      }))
+      
+      console.log('📊 Sample DB mapping structure (after conversion):', dbMappings[0])
+      
       const { data, error } = await supabase!
         .from('field_mappings')
-        .insert(mappings)
+        .insert(dbMappings)
         .select()
 
       if (error) {
-        console.error('Error creating field mappings:', error)
+        console.error('❌ Error creating field mappings:', error)
+        console.error('🔍 Error details:', JSON.stringify(error, null, 2))
+        console.error('📝 Sample data that failed:', JSON.stringify(dbMappings.slice(0, 2), null, 2))
         return []
       }
 
-      return data || []
+      console.log('✅ Successfully created', data?.length || 0, 'field mappings')
+      
+      // Convert back from DB format to TypeScript interface
+      const convertedData: FieldMapping[] = (data || []).map((dbMapping: any) => ({
+        id: dbMapping.id,
+        project_id: dbMapping.project_id,
+        source_field: dbMapping.source_value,  // Convert source_value back to source_field
+        target_field: dbMapping.target_field,
+        confidence_score: dbMapping.confidence_score,
+        is_manual: dbMapping.is_manual,
+        created_at: dbMapping.created_at
+      }))
+      
+      return convertedData
     } catch (error) {
-      console.error('Error in createFieldMappings:', error)
+      console.error('❌ Exception in createFieldMappings:', error)
       return []
     }
   },
@@ -215,7 +244,18 @@ export const fieldMappingService = {
         return []
       }
 
-      return data || []
+      // Convert from DB format to TypeScript interface
+      const convertedData: FieldMapping[] = (data || []).map((dbMapping: any) => ({
+        id: dbMapping.id,
+        project_id: dbMapping.project_id,
+        source_field: dbMapping.source_value,  // Convert source_value to source_field
+        target_field: dbMapping.target_field,
+        confidence_score: dbMapping.confidence_score,
+        is_manual: dbMapping.is_manual,
+        created_at: dbMapping.created_at
+      }))
+
+      return convertedData
     } catch (error) {
       console.error('Error in getFieldMappings:', error)
       return []
@@ -593,6 +633,101 @@ export const fileUploadService = {
       return true
     } catch (error) {
       console.error('Error in deleteFile:', error)
+      return false
+    }
+  }
+}
+
+// Optional Fields Services
+export const optionalFieldService = {
+  // Create optional fields
+  async createOptionalFields(optionalFields: Omit<OptionalField, 'id' | 'created_at' | 'updated_at'>[]): Promise<OptionalField[]> {
+    if (!checkSupabase()) return []
+    
+    try {
+      console.log('🔄 Creating optional fields:', optionalFields.length, 'items')
+      
+      const { data, error } = await supabase!
+        .from('optional_fields')
+        .insert(optionalFields)
+        .select()
+
+      if (error) {
+        console.error('❌ Error creating optional fields:', error)
+        return []
+      }
+
+      console.log('✅ Successfully created', data?.length || 0, 'optional fields')
+      return data || []
+    } catch (error) {
+      console.error('❌ Exception in createOptionalFields:', error)
+      return []
+    }
+  },
+
+  // Get optional fields for a project
+  async getOptionalFields(projectId: string): Promise<OptionalField[]> {
+    if (!checkSupabase()) return []
+    
+    try {
+      const { data, error } = await supabase!
+        .from('optional_fields')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        console.error('Error fetching optional fields:', error)
+        return []
+      }
+
+      return data || []
+    } catch (error) {
+      console.error('Error in getOptionalFields:', error)
+      return []
+    }
+  },
+
+  // Update optional field
+  async updateOptionalField(fieldId: string, updates: Partial<OptionalField>): Promise<boolean> {
+    if (!checkSupabase()) return false
+    
+    try {
+      const { error } = await supabase!
+        .from('optional_fields')
+        .update(updates)
+        .eq('id', fieldId)
+
+      if (error) {
+        console.error('Error updating optional field:', error)
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.error('Error in updateOptionalField:', error)
+      return false
+    }
+  },
+
+  // Delete optional field
+  async deleteOptionalField(fieldId: string): Promise<boolean> {
+    if (!checkSupabase()) return false
+    
+    try {
+      const { error } = await supabase!
+        .from('optional_fields')
+        .delete()
+        .eq('id', fieldId)
+
+      if (error) {
+        console.error('Error deleting optional field:', error)
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.error('Error in deleteOptionalField:', error)
       return false
     }
   }
