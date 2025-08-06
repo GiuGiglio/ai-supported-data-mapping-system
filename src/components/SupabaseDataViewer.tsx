@@ -15,8 +15,8 @@ export function SupabaseDataViewer() {
   const loadProjects = async () => {
     setLoading(true)
     try {
-      // Using mock user ID for now
-      const mockUserId = '00000000-0000-0000-0000-000000000000'
+      // Using same mock user ID as FileUpload component
+      const mockUserId = '96e65406-f077-4709-8671-2f092c9f7bfb'
       const projectsData = await projectService.getProjects(mockUserId)
       setProjects(projectsData)
     } catch (error) {

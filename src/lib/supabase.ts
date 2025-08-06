@@ -1,13 +1,31 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Environment variables
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+// Environment variables (with fallback for development)
+let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+let supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+// Debug environment variables
+console.log('🔧 Supabase Configuration Debug:')
+console.log('- URL exists:', !!supabaseUrl)
+console.log('- URL value:', supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : 'undefined')
+console.log('- Key exists:', !!supabaseAnonKey)
+console.log('- Key value:', supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : 'undefined')
+
+// Development fallback (if env vars don't load)
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('⚠️ Environment variables not loaded, using development fallback')
+  supabaseUrl = 'https://jyvoczkzzqmjlyvgdqlc.supabase.co'
+  supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp5dm9jemt6enFtamx5dmdkcWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMjUwMzEsImV4cCI6MjA2OTgwMTAzMX0.PEY-_H3_iAbAw7ZjhI6LQIPUGKeMK3uC1rASvoHBm1U'
+}
 
 // Check if Supabase is properly configured
 const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
   supabaseUrl !== 'https://placeholder.supabase.co' && 
   supabaseAnonKey !== 'placeholder-key'
+
+console.log('- Is configured:', isSupabaseConfigured)
+console.log('- Final URL:', supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : 'undefined')
+console.log('- Final Key:', supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : 'undefined')
 
 // Create Supabase client with proper error handling
 export const supabase = isSupabaseConfigured 

@@ -14,6 +14,7 @@ interface ProcessedData {
   projectId: string
   timestamp: Date
   mappings?: FieldMappingResult[]
+  fieldDescriptions?: Record<string, string> // Field descriptions from Excel template
 }
 
 export default function Home() {
@@ -22,12 +23,13 @@ export default function Home() {
   const [showMapping, setShowMapping] = useState<{ [key: string]: boolean }>({})
   const [showSupabaseViewer, setShowSupabaseViewer] = useState(false)
 
-  const handleFileProcessed = (data: any[], fileName: string, projectId: string) => {
+  const handleFileProcessed = (data: any[], fileName: string, projectId: string, fieldDescriptions?: Record<string, string>) => {
     const newProcessedFile: ProcessedData = {
       data,
       fileName,
       projectId,
-      timestamp: new Date()
+      timestamp: new Date(),
+      fieldDescriptions
     }
     setProcessedFiles(prev => [...prev, newProcessedFile])
   }
@@ -192,6 +194,7 @@ export default function Home() {
                         <FieldMapping
                           sourceData={processedFile.data}
                           projectId={processedFile.projectId}
+                          fieldDescriptions={processedFile.fieldDescriptions}
                           onMappingComplete={(mappings) => handleMappingComplete(processedFile.fileName, mappings)}
                         />
                       </div>

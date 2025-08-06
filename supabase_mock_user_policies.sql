@@ -41,6 +41,9 @@ CREATE POLICY "Mock user access to product_data" ON product_data
     )
   );
 
+-- Enable RLS for target_fields if not enabled
+ALTER TABLE target_fields ENABLE ROW LEVEL SECURITY;
+
 -- Public Read für target_fields (alle können lesen)
 CREATE POLICY "Public read target_fields" ON target_fields
   FOR SELECT USING (true);

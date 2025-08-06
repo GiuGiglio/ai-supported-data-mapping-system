@@ -10,6 +10,7 @@ export interface FieldMappingResult {
 export interface FieldMappingRequest {
   sourceFields: string[]
   targetFields: TargetField[]
+  fieldDescriptions?: Record<string, string> // Field descriptions for better AI understanding
 }
 
 /**
@@ -17,52 +18,159 @@ export interface FieldMappingRequest {
  * to automatically map source fields to target fields
  */
 export class AIFieldMappingService {
-  private readonly apiKey: string | null
+  private apiKey: string | null
 
   constructor() {
-    this.apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY || null
+    console.log('🏗️ AIFieldMappingService constructor called - switching to Gemini')
+    this.apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || null
+    
+    console.log('🔑 Gemini API key exists:', !!this.apiKey)
+    console.log('🔑 Gemini API key value:', this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'null')
+    
+    // Development fallback if env vars don't load
+    if (!this.apiKey || this.apiKey.trim() === '') {
+      this.apiKey = 'AIzaSyAckWtkcTgkx5_WoyRV48BZfsiL0ISAMDc'
+      console.log('🔧 Using hardcoded Gemini API key for development')
+    } else {
+      console.log('✅ Using environment Gemini API key')
+    }
+    
+    console.log('🔑 Final Gemini API key exists:', !!this.apiKey)
+    console.log('🔑 Final Gemini API key preview:', this.apiKey ? this.apiKey.substring(0, 15) + '...' : 'null')
   }
 
   /**
    * Performs intelligent field mapping using AI
    */
   async mapFields(request: FieldMappingRequest): Promise<FieldMappingResult[]> {
-    if (!this.apiKey) {
-      console.warn('OpenAI API key not configured. Using fallback mapping.')
+    console.log('🔧 AI Field Mapping Service called', {
+      sourceFields: request?.sourceFields?.length || 0,
+      targetFields: request?.targetFields?.length || 0,
+      hasApiKey: !!this.apiKey,
+      apiKeyFirst10: this.apiKey ? this.apiKey.substring(0, 10) : 'null'
+    })
+
+    // Validate request
+    if (!request) {
+      console.error('❌ mapFields: request is null or undefined')
+      throw new Error('Mapping request is null or undefined')
+    }
+
+    if (!request.sourceFields || request.sourceFields.length === 0) {
+      console.error('❌ mapFields: sourceFields is empty or null')
+      return []
+    }
+
+    if (!request.targetFields || request.targetFields.length === 0) {
+      console.error('❌ mapFields: targetFields is empty or null')
+      console.log('Using fallback mapping due to missing target fields')
+      return this.fallbackMapping(request)
+    }
+
+    if (!this.apiKey || this.apiKey === 'your-api-key-here' || this.apiKey.trim() === '') {
+      console.warn('⚠️ Gemini API key not configured. Using fallback mapping.')
+      console.log('API Key status:', this.apiKey)
       return this.fallbackMapping(request)
     }
 
     try {
-      const systemPrompt = this.buildSystemPrompt(request.targetFields)
-      const userPrompt = this.buildUserPrompt(request.sourceFields)
+      console.log('🚀 Building AI prompts for Gemini...')
+      
+      let systemPrompt, userPrompt
+      try {
+        systemPrompt = this.buildSystemPrompt(request.targetFields, request.fieldDescriptions)
+      } catch (error) {
+        console.error('❌ Error building system prompt:', error)
+        throw error
+      }
+      
+      try {
+        userPrompt = this.buildUserPrompt(request.sourceFields)
+      } catch (error) {
+        console.error('❌ Error building user prompt:', error)
+        throw error
+      }
+      
+      // Combine system and user prompts for Gemini
+      const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      console.log('📤 Calling Gemini API with key:', this.apiKey ? this.apiKey.substring(0, 15) + '...' : 'null')
+      
+      if (!this.apiKey) {
+        throw new Error('API key is null at fetch time')
+      }
+      
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.1,
-          response_format: { type: 'json_object' }
+          contents: [{
+            parts: [{
+              text: combinedPrompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 2048,
+          }
         })
       })
 
+      console.log('📥 Gemini API response status:', response.status)
+
       if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.status}`)
+        const errorText = await response.text()
+        console.error('❌ Gemini API error:', response.status, errorText)
+        throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
       }
 
       const data = await response.json()
-      const aiResult = JSON.parse(data.choices[0].message.content)
+      console.log('🧠 Gemini raw response:', data)
       
-      return this.parseAIResponse(aiResult, request.sourceFields, request.targetFields)
-    } catch (error) {
-      console.error('Error in AI field mapping:', error)
+      // Extract text from Gemini response
+      const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text
+      if (!responseText) {
+        throw new Error('No response text from Gemini')
+      }
+      
+      console.log('📝 Gemini response text:', responseText)
+      
+      // Parse JSON from response with error handling
+      let aiResult
+      try {
+        // Sometimes Gemini returns text with code blocks, extract JSON
+        let jsonText = responseText.trim()
+        
+        // Remove markdown code blocks if present
+        if (jsonText.includes('```json')) {
+          const jsonMatch = jsonText.match(/```json\s*(.*?)\s*```/s)
+          if (jsonMatch) {
+            jsonText = jsonMatch[1]
+          }
+        } else if (jsonText.includes('```')) {
+          const jsonMatch = jsonText.match(/```\s*(.*?)\s*```/s)
+          if (jsonMatch) {
+            jsonText = jsonMatch[1]
+          }
+        }
+        
+        aiResult = JSON.parse(jsonText)
+        console.log('🎯 Parsed AI result:', aiResult)
+      } catch (parseError) {
+        console.error('❌ Failed to parse Gemini JSON response:', parseError)
+        console.log('Raw response text:', responseText)
+        throw new Error('Invalid JSON response from Gemini API')
+      }
+      
+      const finalMappings = this.parseAIResponse(aiResult, request.sourceFields, request.targetFields)
+      console.log('✅ Final mappings:', finalMappings.length, finalMappings)
+      
+      return finalMappings
+    } catch (error: any) {
+      console.error('❌ Error in AI field mapping:', error)
+      console.log('🔄 Falling back to string similarity mapping...')
       return this.fallbackMapping(request)
     }
   }
@@ -70,15 +178,30 @@ export class AIFieldMappingService {
   /**
    * Builds the system prompt for the AI
    */
-  private buildSystemPrompt(targetFields: TargetField[]): string {
-    const targetFieldNames = targetFields.map(tf => tf.field_name).join(', ')
+  private buildSystemPrompt(targetFields: TargetField[], fieldDescriptions?: Record<string, string>): string {
+    if (!targetFields || targetFields.length === 0) {
+      console.error('❌ buildSystemPrompt: targetFields is empty or null')
+      throw new Error('Target fields array is empty or null')
+    }
+    
+    const targetFieldNames = targetFields.map(tf => tf?.field_name || 'Unknown').join(', ')
+    
+    // Build enhanced field descriptions if available
+    let fieldDescriptionsText = ''
+    if (fieldDescriptions && Object.keys(fieldDescriptions).length > 0) {
+      fieldDescriptionsText = '\n\nField Descriptions (IMPORTANT for accurate mapping):\n'
+      Object.entries(fieldDescriptions).forEach(([fieldName, description]) => {
+        fieldDescriptionsText += `- "${fieldName}": ${description}\n`
+      })
+      fieldDescriptionsText += '\nUse these descriptions to understand field meanings and map accordingly.\n'
+    }
     
     return `You are an expert data mapping AI specialized in mapping product data fields.
 
 Your task is to map source fields from uploaded data files to the correct target fields in our system.
 
 Target fields available in our system:
-${targetFieldNames}
+${targetFieldNames}${fieldDescriptionsText}
 
 Rules for mapping:
 1. Map each source field to the most appropriate target field
@@ -116,6 +239,11 @@ Response format must be valid JSON:
    * Builds the user prompt with source fields
    */
   private buildUserPrompt(sourceFields: string[]): string {
+    if (!sourceFields || sourceFields.length === 0) {
+      console.error('❌ buildUserPrompt: sourceFields is empty or null')
+      throw new Error('Source fields array is empty or null')
+    }
+    
     return `Please map these source fields to target fields:
 
 Source fields: ${sourceFields.join(', ')}
@@ -132,7 +260,13 @@ Return the mapping results in the specified JSON format.`
     targetFields: TargetField[]
   ): FieldMappingResult[] {
     const results: FieldMappingResult[] = []
-    const targetFieldNames = targetFields.map(tf => tf.field_name)
+    
+    if (!targetFields || targetFields.length === 0) {
+      console.error('❌ parseAIResponse: targetFields is empty')
+      return []
+    }
+    
+    const targetFieldNames = targetFields.map(tf => tf?.field_name || 'Unknown')
 
     if (!aiResult.mappings || !Array.isArray(aiResult.mappings)) {
       console.warn('Invalid AI response format, using fallback')
@@ -176,40 +310,70 @@ Return the mapping results in the specified JSON format.`
    * Fallback mapping using simple string similarity
    */
   private fallbackMapping(request: FieldMappingRequest): FieldMappingResult[] {
+    console.log('🔄 Using fallback mapping algorithm...')
+    
+    if (!request?.sourceFields || request.sourceFields.length === 0) {
+      console.error('❌ fallbackMapping: sourceFields is empty')
+      return []
+    }
+    
+    if (!request?.targetFields || request.targetFields.length === 0) {
+      console.error('❌ fallbackMapping: targetFields is empty')
+      return []
+    }
+    
     const results: FieldMappingResult[] = []
 
     for (const sourceField of request.sourceFields) {
-      const bestMatch = this.findBestFallbackMatch(sourceField, request.targetFields)
-      const confidence = this.calculateSimilarity(sourceField, bestMatch.field_name)
+      if (!sourceField || typeof sourceField !== 'string') {
+        console.warn('⚠️ Skipping invalid source field:', sourceField)
+        continue
+      }
       
-      results.push({
-        sourceField,
-        targetField: bestMatch.field_name,
-        confidence: Math.max(0.2, confidence), // Minimum confidence of 0.2
-        reason: `String similarity match (fallback)`
-      })
+      const bestMatch = this.findBestFallbackMatch(sourceField, request.targetFields)
+      
+      if (bestMatch) {
+        const confidence = this.calculateSimilarity(sourceField, bestMatch.field_name)
+        
+        results.push({
+          sourceField,
+          targetField: bestMatch.field_name,
+          confidence: Math.max(0.2, confidence), // Minimum confidence of 0.2
+          reason: `String similarity match (fallback)`
+        })
+      }
     }
 
+    console.log('✅ Fallback mapping completed:', results.length, 'mappings')
     return results
   }
 
   /**
    * Finds the best target field match using simple heuristics
    */
-  private findBestFallbackMatch(sourceField: string, targetFields: TargetField[]): TargetField {
+  private findBestFallbackMatch(sourceField: string, targetFields: TargetField[]): TargetField | null {
+    if (!sourceField || !targetFields || targetFields.length === 0) {
+      console.error('❌ findBestFallbackMatch: invalid parameters')
+      return null
+    }
+    
     const sourceLower = sourceField.toLowerCase()
     
     // Define mapping rules for common patterns
     const mappingRules: { [key: string]: string[] } = {
-      'Portal Name': ['name', 'title', 'product name', 'productname', 'portal name'],
+      'Portal Name': ['name', 'title', 'product name', 'productname', 'portal name', 'item name'],
       'Producer Name': ['brand', 'manufacturer', 'producer', 'hersteller', 'make'],
-      'Product Description': ['description', 'desc', 'details', 'beschreibung'],
+      'Product Description': ['description', 'desc', 'details', 'beschreibung', 'initial data', 'important'],
       'Article Number/SKU': ['sku', 'article', 'item number', 'artikel', 'artikelnummer'],
       'GTIN': ['gtin', 'ean', 'barcode', 'upc'],
-      'Initial Suggested Retail Price (SRP) EU': ['price', 'cost', 'preis', 'msrp', 'uvp', 'srp'],
-      'Custom Category': ['category', 'type', 'kategorie', 'produkttyp'],
+      'Initial Suggested Retail Price (SRP) EU': ['price', 'cost', 'preis', 'msrp', 'uvp', 'srp', 'usd'],
+      'Custom Category': ['category', 'type', 'kategorie', 'produkttyp', 'product category'],
       'Color': ['color', 'colour', 'farbe'],
-      'Country of Origin': ['country', 'origin', 'herkunft', 'land']
+      'Country of Origin': ['country', 'origin', 'herkunft', 'land'],
+      'Licence Name (Theme)': ['license', 'licence', 'theme', 'franchise'],
+      'CN - Item': ['cn', 'item', 'classification'],
+      'Release Name': ['release', 'edition', 'street date'],
+      'Language Version': ['language', 'version', 'lang']
     }
 
     // First, try exact rule matching
@@ -225,10 +389,12 @@ Return the mapping results in the specified JSON format.`
     let bestSimilarity = 0
 
     for (const targetField of targetFields) {
-      const similarity = this.calculateSimilarity(sourceLower, targetField.field_name.toLowerCase())
-      if (similarity > bestSimilarity) {
-        bestSimilarity = similarity
-        bestMatch = targetField
+      if (targetField?.field_name) {
+        const similarity = this.calculateSimilarity(sourceLower, targetField.field_name.toLowerCase())
+        if (similarity > bestSimilarity) {
+          bestSimilarity = similarity
+          bestMatch = targetField
+        }
       }
     }
 
@@ -277,5 +443,18 @@ Return the mapping results in the specified JSON format.`
   }
 }
 
-// Export singleton instance
-export const aiFieldMappingService = new AIFieldMappingService()
+// Export singleton instance with error handling
+let aiFieldMappingServiceInstance: AIFieldMappingService | null = null
+
+export const aiFieldMappingService = (() => {
+  if (!aiFieldMappingServiceInstance) {
+    try {
+      aiFieldMappingServiceInstance = new AIFieldMappingService()
+      console.log('✅ AIFieldMappingService singleton created successfully')
+    } catch (error) {
+      console.error('❌ Error creating AIFieldMappingService:', error)
+      throw error
+    }
+  }
+  return aiFieldMappingServiceInstance
+})()

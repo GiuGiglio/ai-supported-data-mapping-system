@@ -9,7 +9,7 @@ import { projectService, productDataService, fileUploadService } from '@/lib/sup
 import { supabase } from '@/lib/supabase'
 
 interface FileUploadProps {
-  onFileProcessed: (data: any[], fileName: string, projectId: string) => void
+  onFileProcessed: (data: any[], fileName: string, projectId: string, fieldDescriptions?: Record<string, string>) => void
 }
 
 interface UploadedFile {
@@ -32,45 +32,217 @@ const ACCEPTED_FILE_TYPES = {
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 
-// Helper function to clean Excel data from empty columns and rows
-const cleanExcelData = (data: any[]): any[] => {
-  if (!data || data.length === 0) return data
+// Helper function to detect Excel template format (enhanced for complex templates)
+const detectExcelTemplate = (data: any[]): boolean => {
+  if (!data || data.length < 3) return false
+  
+  console.log('🔍 Analyzing Excel structure...')
+  console.log('📊 Total rows:', data.length)
+  
+  // Log first few rows to understand structure
+  data.slice(0, Math.min(8, data.length)).forEach((row, index) => {
+    const values = Object.values(row).filter(v => v !== null && v !== undefined && String(v).trim() !== '')
+    console.log(`Row ${index + 1}:`, values.length > 0 ? values.slice(0, 5) : ['(empty)'])
+  })
+  
+  // Check different patterns:
+  
+  // Pattern 1: Row 2 has field names, Row 3 has data
+  const row2Values = Object.values(data[1] || {}).filter(v => 
+    v !== null && v !== undefined && String(v).trim() !== ''
+  )
+  const row3Values = Object.values(data[2] || {}).filter(v => 
+    v !== null && v !== undefined && String(v).trim() !== ''
+  )
+  
+  const hasFieldNamesInRow2 = row2Values.some(value => 
+    typeof value === 'string' && 
+    (value.includes('Article Number') || value.includes('GTIN') || value.includes('Portal Name') || 
+     value.includes('Product') || value.includes('Weight') || value.includes('Description'))
+  )
+  
+  // Pattern 2: Look for description rows (Row 6-7)
+  const hasDescriptionRows = data.length >= 6 && 
+    Object.values(data[4] || {}).some(value => 
+      typeof value === 'string' && value.toLowerCase().includes('beschreibung')
+    )
+  
+  console.log('🔍 Template detection patterns:', {
+    hasFieldNamesInRow2,
+    hasDescriptionRows,
+    row2ValuesCount: row2Values.length,
+    row3ValuesCount: row3Values.length,
+    rowCount: data.length
+  })
+  
+  return (hasFieldNamesInRow2 || hasDescriptionRows) && data.length >= 3
+}
 
-  return data.map(row => {
+// Helper function to parse Excel template format (enhanced for complex structure)
+const parseExcelTemplate = (data: any[]): { processedData: any[], fieldDescriptions: Record<string, string> } => {
+  console.log('📋 Parsing enhanced Excel template format...')
+  
+  if (data.length < 3) {
+    console.warn('⚠️ Template needs at least 3 rows')
+    return { processedData: data, fieldDescriptions: {} }
+  }
+  
+  // Enhanced structure:
+  // Row 1: Empty
+  // Row 2: Field names (target fields + additional fields)
+  // Row 3: Source data values
+  // Row 4: Empty
+  // Row 5: "Beschreibung" marker
+  // Row 6-7: Field descriptions (important for AI training!)
+  
+  const fieldNamesRow = data[1] // Row 2 (index 1)
+  const sourceDataRow = data[2] // Row 3 (index 2)
+  
+  console.log('🏷️ Field names row (Row 2):', Object.values(fieldNamesRow).slice(0, 8))
+  console.log('📊 Source data row (Row 3):', Object.values(sourceDataRow).slice(0, 8))
+  
+  // Extract field names from row 2 - these are our target field names
+  const fieldNames = Object.values(fieldNamesRow).filter(value => 
+    value && typeof value === 'string' && value.trim() !== ''
+  ) as string[]
+  
+  // Extract source data values from row 3
+  const sourceDataValues = Object.values(sourceDataRow)
+  
+  console.log('🎯 Extracted field names:', fieldNames)
+  console.log('📈 Source data values count:', sourceDataValues.length)
+  
+  // Extract field descriptions from rows 6-7 (if available)
+  const fieldDescriptions: Record<string, string> = {}
+  
+  if (data.length >= 6) {
+    console.log('📝 Looking for field descriptions...')
+    
+    // Check if row 5 has "Beschreibung" marker
+    const row5Values = Object.values(data[4] || {})
+    const hasDescriptionMarker = row5Values.some(value => 
+      typeof value === 'string' && value.toLowerCase().includes('beschreibung')
+    )
+    
+    if (hasDescriptionMarker) {
+      console.log('✅ Found description marker in row 5')
+      
+      // Extract descriptions from rows 6-7
+      const descriptionRows = [data[5], data[6]].filter(Boolean)
+      
+      descriptionRows.forEach((row, rowIndex) => {
+        const descriptions = Object.values(row)
+        
+        descriptions.forEach((desc, colIndex) => {
+          if (desc && typeof desc === 'string' && desc.trim() !== '' && colIndex < fieldNames.length) {
+            const fieldName = fieldNames[colIndex]
+            if (fieldName) {
+              if (!fieldDescriptions[fieldName]) {
+                fieldDescriptions[fieldName] = desc.trim()
+              } else {
+                fieldDescriptions[fieldName] += ' ' + desc.trim()
+              }
+            }
+          }
+        })
+      })
+      
+      console.log('📚 Extracted field descriptions:', fieldDescriptions)
+    }
+  }
+  
+  // Create processed data - single row with field names as keys and source values as values
+  const processedData = []
+  
+  if (sourceDataValues.length > 0) {
+    const dataRow: any = {}
+    
+    fieldNames.forEach((fieldName, index) => {
+      if (index < sourceDataValues.length) {
+        const value = sourceDataValues[index]
+        if (value !== null && value !== undefined && String(value).trim() !== '') {
+          dataRow[fieldName] = value
+        }
+      }
+    })
+    
+    // Only add row if it has data
+    if (Object.keys(dataRow).length > 0) {
+      processedData.push(dataRow)
+    }
+  }
+  
+  console.log('🎉 Enhanced template parsing completed:')
+  console.log('  - Data rows:', processedData.length)
+  console.log('  - Field descriptions:', Object.keys(fieldDescriptions).length)
+  if (processedData.length > 0) {
+    console.log('📋 Sample processed row:', processedData[0])
+  }
+  
+  return { processedData, fieldDescriptions }
+}
+
+// Helper function to clean Excel data from empty columns and rows
+const cleanExcelData = (data: any[]): { cleanedData: any[], fieldDescriptions?: Record<string, string> } => {
+  if (!data || data.length === 0) return { cleanedData: data }
+
+  console.log('🧹 Cleaning Excel data:', data.length, 'rows')
+  console.log('🔍 Sample raw row:', data[0])
+  
+  // Check if this is a template format
+  if (detectExcelTemplate(data)) {
+    const { processedData, fieldDescriptions } = parseExcelTemplate(data)
+    return { cleanedData: processedData, fieldDescriptions }
+  }
+
+  const cleanedData = data.map(row => {
     const cleanedRow: any = {}
     
     Object.keys(row).forEach(key => {
       // Skip empty or invalid keys
       if (!key || 
           key.trim() === '' || 
-          key.startsWith('_EMPTY') || 
-          key.includes('__EMPTY__')) {
+          key.startsWith('__EMPTY') || 
+          key.includes('__EMPTY__') ||
+          key.startsWith('_EMPTY')) {
         return
       }
       
-      // Clean the key name
+      // Clean the key name and check if value has content
       const cleanKey = key.trim()
-      if (cleanKey && row[key] !== null && row[key] !== undefined) {
-        cleanedRow[cleanKey] = row[key]
+      const value = row[key]
+      
+      // Only include if key has meaningful content (be less restrictive with values for mapping)
+      if (cleanKey) {
+        // Include the field even if value is empty - let AI mapping handle it
+        cleanedRow[cleanKey] = value || ''
       }
     })
     
     return cleanedRow
   }).filter(row => {
-    // Filter out completely empty rows
-    const values = Object.values(row)
-    return values.some(value => 
-      value !== null && 
-      value !== undefined && 
-      String(value).trim() !== ''
-    )
+    // Keep rows that have at least one meaningful field name (don't filter by content)
+    const fieldNames = Object.keys(row)
+    const hasValidFields = fieldNames.length > 0
+    
+    // Removed debug log
+    
+    return hasValidFields
   })
+
+  console.log('✨ Cleaned data:', cleanedData.length, 'rows')
+  if (cleanedData.length > 0) {
+    console.log('📋 Sample cleaned row:', cleanedData[0])
+    console.log('🏷️ Cleaned keys:', Object.keys(cleanedData[0]))
+  }
+
+  return { cleanedData }
 }
 
 export function FileUpload({ onFileProcessed }: FileUploadProps) {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
 
-  const processFile = async (file: File): Promise<any[]> => {
+  const processFile = async (file: File): Promise<{data: any[], fieldDescriptions?: Record<string, string>}> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       
@@ -78,6 +250,7 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
         try {
           const data = e.target?.result
           let jsonData: any[] = []
+          let extractedFieldDescriptions: Record<string, string> | undefined = undefined
 
           if (file.type === 'application/json') {
             jsonData = JSON.parse(data as string)
@@ -89,7 +262,14 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
               defval: '',
               blankrows: false
             })
-            jsonData = cleanExcelData(jsonData)
+            const { cleanedData, fieldDescriptions } = cleanExcelData(jsonData)
+            jsonData = cleanedData
+            extractedFieldDescriptions = fieldDescriptions
+            
+            // Store field descriptions for AI training (if available)
+            if (fieldDescriptions && Object.keys(fieldDescriptions).length > 0) {
+              console.log('📚 Field descriptions extracted for AI training:', fieldDescriptions)
+            }
           } else if (file.type.includes('excel') || file.type.includes('spreadsheet')) {
             console.log('📊 Processing Excel file:', file.name, 'Type:', file.type)
             const workbook = XLSX.read(data, { type: 'binary' })
@@ -107,7 +287,15 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
             console.log('🔍 Raw Excel data (first 3 rows):', jsonData.slice(0, 3))
             console.log('🏷️ Original headers:', Object.keys(jsonData[0] || {}))
             
-            jsonData = cleanExcelData(jsonData)
+            const { cleanedData, fieldDescriptions } = cleanExcelData(jsonData)
+            jsonData = cleanedData
+            extractedFieldDescriptions = fieldDescriptions
+            
+            // Store field descriptions for AI training (if available)
+            if (fieldDescriptions && Object.keys(fieldDescriptions).length > 0) {
+              console.log('📚 Field descriptions extracted for AI training:', fieldDescriptions)
+            }
+            
             console.log('✨ Cleaned headers:', Object.keys(jsonData[0] || {}))
             console.log('📊 Final data count:', jsonData.length, 'rows')
           } else if (file.type === 'application/pdf') {
@@ -126,7 +314,7 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
             }]
           }
 
-          resolve(jsonData)
+          resolve({ data: jsonData, fieldDescriptions: extractedFieldDescriptions })
         } catch (error) {
           reject(new Error(`Failed to process file: ${error}`))
         }
@@ -268,7 +456,8 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
         )
 
         // Process the file
-        const data = await processFile(file)
+        const result = await processFile(file)
+        const { data, fieldDescriptions } = result
 
         // Save to Supabase (or local storage as fallback)
         const projectId = await saveToSupabase(file, data)
@@ -282,8 +471,8 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
             )
           )
 
-          // Call the callback with processed data
-          onFileProcessed(data, file.name, projectId)
+          // Call the callback with processed data and field descriptions
+          onFileProcessed(data, file.name, projectId, fieldDescriptions)
         } else {
           throw new Error('Failed to save data')
         }

@@ -82,15 +82,19 @@ export const projectService = {
         console.error('Error fetching projects:', error)
         console.log('🔧 If RLS error, run the mock user setup script')
         
-        // Fallback: try without RLS filtering
-        const { data: fallbackData, error: fallbackError } = await supabase!
-          .rpc('get_projects_dev', { user_id_param: userId })
-          .then(result => ({ data: result.data, error: result.error }))
-          .catch(() => ({ data: null, error: null }))
-          
-        if (fallbackData) {
-          console.log('✅ Used fallback query')
-          return fallbackData
+        // Fallback: try to get all projects (development mode)
+        try {
+          const { data: fallbackData, error: fallbackError } = await supabase!
+            .from('projects')
+            .select('*')
+            .order('created_at', { ascending: false })
+            
+          if (!fallbackError && fallbackData) {
+            console.log('✅ Used fallback query without RLS filtering')
+            return fallbackData
+          }
+        } catch (fallbackError) {
+          console.log('❌ Fallback query also failed:', fallbackError)
         }
         
         return []

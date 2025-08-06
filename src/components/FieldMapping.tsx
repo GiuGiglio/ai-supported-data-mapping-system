@@ -14,10 +14,11 @@ import { TargetField } from '@/lib/supabase'
 interface FieldMappingProps {
   sourceData: any[]
   projectId: string
+  fieldDescriptions?: Record<string, string>
   onMappingComplete: (mappings: FieldMappingResult[]) => void
 }
 
-export function FieldMapping({ sourceData, projectId, onMappingComplete }: FieldMappingProps) {
+export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappingComplete }: FieldMappingProps) {
   const [sourceFields, setSourceFields] = useState<string[]>([])
   const [targetFields, setTargetFields] = useState<TargetField[]>([])
   const [mappings, setMappings] = useState<FieldMappingResult[]>([])
@@ -31,7 +32,10 @@ export function FieldMapping({ sourceData, projectId, onMappingComplete }: Field
       const fields = Object.keys(sourceData[0]).filter(key => 
         key && typeof key === 'string' && key.trim() !== ''
       )
+      console.log('📊 Source fields extracted:', fields.length, fields)
       setSourceFields(fields)
+    } else {
+      console.log('⚠️ No source data provided')
     }
   }, [sourceData])
 
@@ -39,11 +43,19 @@ export function FieldMapping({ sourceData, projectId, onMappingComplete }: Field
   useEffect(() => {
     const loadTargetFields = async () => {
       try {
+        console.log('🎯 Loading target fields...')
         const fields = await targetFieldService.getTargetFields()
-        setTargetFields(fields)
+        console.log('📋 Target fields loaded:', fields.length, fields.slice(0, 3))
+        
+        if (fields.length === 0) {
+          setError('No target fields found. Please check your Supabase configuration and RLS policies.')
+        } else {
+          setTargetFields(fields)
+          setError(null)
+        }
       } catch (error) {
-        console.error('Error loading target fields:', error)
-        setError('Failed to load target fields')
+        console.error('❌ Error loading target fields:', error)
+        setError('Failed to load target fields. Please check your Supabase connection.')
       }
     }
 
@@ -52,8 +64,15 @@ export function FieldMapping({ sourceData, projectId, onMappingComplete }: Field
 
   // Perform AI mapping
   const performAIMapping = async () => {
+    console.log('🤖 Starting AI mapping...', {
+      sourceFields: sourceFields.length,
+      targetFields: targetFields.length
+    })
+    
     if (sourceFields.length === 0 || targetFields.length === 0) {
-      setError('No source fields or target fields available')
+      const errorMsg = `Missing fields: source=${sourceFields.length}, target=${targetFields.length}`
+      console.error('❌', errorMsg)
+      setError(errorMsg)
       return
     }
 
@@ -63,14 +82,28 @@ export function FieldMapping({ sourceData, projectId, onMappingComplete }: Field
     try {
       const mappingRequest = {
         sourceFields,
-        targetFields
+        targetFields,
+        fieldDescriptions
       }
 
+      console.log('📤 Sending mapping request:', mappingRequest)
+      if (fieldDescriptions && Object.keys(fieldDescriptions).length > 0) {
+        console.log('📚 Including field descriptions for AI training:', fieldDescriptions)
+      }
       const aiMappings = await aiFieldMappingService.mapFields(mappingRequest)
+      console.log('📥 AI mappings received:', aiMappings.length, aiMappings)
+      
       setMappings(aiMappings)
+      
+      if (aiMappings.length > 0) {
+        console.log('✅ AI mapping completed successfully')
+      } else {
+        console.warn('⚠️ No mappings returned from AI service')
+        setError('AI service returned no mappings. Please try again or map manually.')
+      }
     } catch (error) {
-      console.error('Error performing AI mapping:', error)
-      setError('Failed to perform AI mapping. Please try manual mapping.')
+      console.error('❌ Error performing AI mapping:', error)
+      setError(`Failed to perform AI mapping: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsLoading(false)
     }
@@ -151,8 +184,13 @@ export function FieldMapping({ sourceData, projectId, onMappingComplete }: Field
           <div className="flex gap-4">
             <Button 
               onClick={performAIMapping} 
-              disabled={isLoading || targetFields.length === 0}
+              disabled={isLoading || targetFields.length === 0 || sourceFields.length === 0}
               className="flex items-center gap-2"
+              title={
+                targetFields.length === 0 ? 'Loading target fields...' :
+                sourceFields.length === 0 ? 'No source fields detected' :
+                'Click to perform AI mapping'
+              }
             >
               {isLoading ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
