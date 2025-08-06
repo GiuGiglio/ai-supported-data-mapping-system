@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Input } from '@/components/ui/input'
 import { ArrowRight, CheckCircle, AlertCircle, RefreshCw, Save } from 'lucide-react'
 import { targetFieldService, fieldMappingService, optionalFieldService } from '@/lib/supabase-services'
 import { aiFieldMappingService, FieldMappingResult } from '@/lib/ai-field-mapping'
@@ -56,11 +57,14 @@ export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappi
       
       if (requiredCount + optionalCount > 1) {
         targetFieldDuplicates[targetField] = { requiredCount, optionalCount }
+        console.log(`🔍 Duplicate detected: "${targetField}" appears ${requiredCount} times in Required and ${optionalCount} times in Optional`)
       }
     })
     
     if (Object.keys(targetFieldDuplicates).length > 0) {
       console.warn('⚠️ Target field duplicates detected:', targetFieldDuplicates)
+    } else {
+      console.log('✅ No target field duplicates found')
     }
     
     console.log('🔍 Categorizing mappings:', {
@@ -363,26 +367,40 @@ export function FieldMapping({ sourceData, projectId, fieldDescriptions, onMappi
 
               {/* Target Field Selection */}
               <div className="flex-1">
-                <Select
-                  value={mapping.targetField}
-                  onValueChange={(value) => updateMapping(mapping.sourceField, value)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select target field" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {targetFields.map(field => (
-                      <SelectItem key={field.id} value={field.field_name}>
-                        <div className="flex items-center gap-2">
-                          <span>{field.field_name}</span>
-                          <Badge variant="outline" className="text-xs">
-                            Required
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {isRequired ? (
+                  <Select
+                    value={mapping.targetField}
+                    onValueChange={(value) => updateMapping(mapping.sourceField, value)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select target field" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {targetFields.map(field => (
+                        <SelectItem key={field.id} value={field.field_name}>
+                          <div className="flex items-center gap-2">
+                            <span>{field.field_name}</span>
+                            <Badge variant="outline" className="text-xs">
+                              Required
+                            </Badge>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="space-y-2">
+                    <Input
+                      value={mapping.targetField}
+                      onChange={(e) => updateMapping(mapping.sourceField, e.target.value)}
+                      placeholder="Enter custom target field name"
+                      className="w-full"
+                    />
+                    <div className="text-xs text-gray-500">
+                      Custom target field name for optional field
+                    </div>
+                  </div>
+                )}
                 <div className="text-sm text-gray-500 mt-1">
                   {isRequired ? 'Required Target Field' : 'Optional Target Field'}
                 </div>

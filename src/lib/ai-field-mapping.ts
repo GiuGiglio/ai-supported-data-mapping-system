@@ -513,6 +513,20 @@ Return the mapping results in the specified JSON format with exactly ${sourceFie
       }
     }
 
+    // CRITICAL: Post-process to fix classification - exact matches should be Required
+    console.log('🔧 Post-processing classification...')
+    for (const result of results) {
+      if (hasTargetFields && targetFieldNames.includes(result.targetField)) {
+        // If target field exists in our system, it should be Required
+        if (!result.isRequired) {
+          console.log(`🔧 Fixing classification: "${result.sourceField}" → "${result.targetField}" should be Required`)
+          result.isRequired = true
+          result.isOptional = false
+          result.reason = `${result.reason} (auto-corrected: exact target field match)`
+        }
+      }
+    }
+
     console.log(`✅ Final results: ${results.length} total mappings for ${sourceFields.length} source fields`)
     console.log(`   - ${results.filter(r => r.isRequired).length} required mappings`)
     console.log(`   - ${results.filter(r => r.isOptional).length} optional mappings`) 

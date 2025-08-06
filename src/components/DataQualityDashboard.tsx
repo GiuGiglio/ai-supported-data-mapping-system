@@ -391,6 +391,20 @@ export function DataQualityDashboard({ processedFiles }: DataQualityDashboardPro
     setEditingValue('')
   }
 
+  // Toggle field type between Required and Optional
+  const toggleFieldType = (fieldName: string) => {
+    console.log(`🔄 Toggling field type for: ${fieldName}`)
+    // This would update the mappings in the selected data
+    // For now, just log the action
+  }
+
+  // Remove field (only for Optional fields)
+  const removeField = (fieldName: string) => {
+    console.log(`🗑️ Removing field: ${fieldName}`)
+    // This would remove the field from the mappings
+    // For now, just log the action
+  }
+
   // Generate product name using AI
   const generateProductName = async () => {
     if (!selectedData || selectedData.data.length === 0) {
@@ -477,6 +491,7 @@ export function DataQualityDashboard({ processedFiles }: DataQualityDashboardPro
               </Button>
             </th>
             <th className="text-left p-3">Reason</th>
+            <th className="text-left p-3">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -554,6 +569,28 @@ export function DataQualityDashboard({ processedFiles }: DataQualityDashboardPro
                 <span className="text-sm text-gray-600">
                   {field.reason}
                 </span>
+              </td>
+              <td className="p-3">
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => toggleFieldType(field.fieldName)}
+                    className="text-xs px-2 py-1"
+                  >
+                    {field.isRequired ? '→ Optional' : '→ Required'}
+                  </Button>
+                  {!field.isRequired && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => removeField(field.fieldName)}
+                      className="text-xs px-2 py-1"
+                    >
+                      ✕ Remove
+                    </Button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
