@@ -1,204 +1,258 @@
-# AI Mapping System
+# AI-Supported Data Mapping System
 
-Ein KI-gestütztes Daten-Mapping System für die automatisierte Produktdaten-Verarbeitung mit Supabase Backend.
+Ein intelligentes System zur automatisierten Zuordnung von Datenfeldern mit KI-Unterstützung für E-Commerce-Produktdaten.
 
-## User Story 1: Datei-Upload und -Erkennung
+## 🚀 Features
 
-Diese Implementierung erfüllt die High Priority User Story 1 mit folgenden Akzeptanzkriterien:
+### 📁 Multi-Format File Import
+- **Excel (.xlsx)**: Vollständige Unterstützung mit Duplikatserkennung und Beschreibungsextraktion
+- **CSV**: Automatische Delimiter-Erkennung und Parsing
+- **PDF/TXT**: Grundlegende Unterstützung mit manueller Verarbeitungsanleitung
+- **Duplikat-Handling**: Erkennung und Auswahl bei doppelten Feldnamen in Excel-Dateien
 
-### ✅ Erfüllte Akzeptanzkriterien:
+### 🤖 KI-Powered Field Mapping
+- **Google Gemini Integration**: Intelligente Feldzuordnung mit hoher Genauigkeit
+- **Fallback-System**: String-Ähnlichkeits-Mapping bei KI-Ausfall
+- **Smart Classification**: Automatische Kategorisierung als Required/Optional
+- **Exact Match Detection**: 100%ige Zuordnung bei exakten Feldnamen-Übereinstimmungen
 
-- **System akzeptiert Excel (.xlsx, .xls), CSV, JSON, PDF und Freitext-Eingaben**
-- **Drag-and-Drop-Funktionalität verfügbar**
-- **Dateigröße bis 50MB unterstützt**
-- **Fehlermeldungen bei nicht unterstützten Formaten**
-- **Upload-Progress-Anzeige**
+### 🎯 Interactive Mapping Interface
+- **Drag & Drop Upload**: Benutzerfreundliche Datei-Upload-Oberfläche
+- **Real-time Preview**: Sofortige Anzeige der erkannten Felder und Werte
+- **Editable Mappings**: Änderung von Zuordnungen vor dem Speichern
+- **Custom Target Fields**: Eingabe eigener Zielfeld-Namen für optionale Felder
+- **Duplicate Detection**: Visuelle Hervorhebung von Duplikaten in der Mapping-UI
 
-### 🚀 Features:
+### 📊 Quality Dashboard
+- **Data Quality Metrics**: Übersicht über Vollständigkeit und Qualität der Daten
+- **Interactive Filtering**: Filter nach Status (Complete, Missing, Critical, Duplicate)
+- **Inline Editing**: Direkte Bearbeitung von Werten im Dashboard
+- **Field Management**: Verschiebung zwischen Required/Optional und Entfernung von Feldern
+- **Value Lists Integration**: Dropdown-Auswahl für vordefinierte Attributwerte
 
-1. **Drag & Drop Interface**: Intuitive Datei-Upload-Oberfläche
-2. **Multi-Format Support**: Excel, CSV, JSON, PDF, Text
-3. **Progress Tracking**: Echtzeit-Upload- und Verarbeitungsfortschritt
-4. **Error Handling**: Detaillierte Fehlermeldungen
-5. **File Management**: Anzeige und Verwaltung hochgeladener Dateien
-6. **Data Preview**: Vorschau der verarbeiteten Daten
-7. **Download Functionality**: Export verarbeiteter Daten als JSON
-8. **Supabase Integration**: Automatische Speicherung in PostgreSQL-Datenbank
-9. **File Storage**: Supabase Storage für Datei-Uploads
-10. **Real-time Updates**: Supabase Real-time für Dashboard-Updates
+### 🏷️ AI Product Name Generation
+- **Smart Naming**: KI-generierte Produktnamen basierend auf Daten
+- **Consistent Format**: "Brand + Description + Key Attributes" Schema
+- **Confidence Scoring**: Bewertung der Namensqualität
+- **Manual Adjustment**: Möglichkeit zur nachträglichen Anpassung
 
-## 🛠️ Technologie-Stack
+### 💾 Database Integration
+- **Supabase Backend**: PostgreSQL-Datenbank mit Real-time Features
+- **Project Management**: Organisierung von Mapping-Projekten
+- **History Tracking**: Verfolgung von Änderungen und Versionen
+- **File Storage**: Sichere Speicherung hochgeladener Dateien
 
-- **Frontend**: Next.js 15 mit TypeScript
-- **Backend**: Supabase (PostgreSQL + Auth + Storage + Real-time)
-- **UI Framework**: Tailwind CSS + Custom Components
-- **File Processing**: xlsx.js für Excel/CSV-Verarbeitung
-- **Drag & Drop**: react-dropzone
-- **Icons**: Lucide React
-- **Deployment**: Vercel
+## 🛠️ Tech Stack
 
-## 📦 Installation
+### Frontend
+- **Next.js 15**: React-Framework mit App Router
+- **TypeScript**: Typsichere Entwicklung
+- **Tailwind CSS**: Utility-first CSS Framework
+- **Shadcn/UI**: Moderne UI-Komponenten
+- **Lucide React**: Icon-Bibliothek
 
-### 1. Repository klonen
-```bash
-git clone <repository-url>
-cd ai-mapping-system
-```
+### Backend & Database
+- **Supabase**: PostgreSQL-Datenbank mit Real-time Features
+- **Row Level Security (RLS)**: Sichere Datenzugriffe
+- **File Storage**: Supabase Storage für Datei-Upload
 
-### 2. Abhängigkeiten installieren
-```bash
-npm install
-```
+### AI & Processing
+- **Google Gemini API**: Large Language Model für intelligente Zuordnungen
+- **XLSX**: Excel-Datei-Verarbeitung
+- **React Dropzone**: File-Upload-Interface
 
-### 3. Supabase Setup
+## 🚦 Getting Started
 
-#### A. Supabase Projekt erstellen
-1. Gehen Sie zu [supabase.com](https://supabase.com)
-2. Erstellen Sie ein neues Projekt
-3. Notieren Sie sich die Project URL und Anon Key
+### Prerequisites
+- Node.js 18+ 
+- npm oder yarn
+- Supabase Account
+- Google Gemini API Key
 
-#### B. Datenbank-Schema einrichten
-1. Öffnen Sie die Supabase SQL Editor
-2. Führen Sie das Schema aus `supabase/schema.sql` aus
-3. Erstellen Sie einen Storage Bucket namens "uploads"
+### Installation
 
-#### C. Environment-Variablen konfigurieren
-```bash
-cp env.example .env.local
-```
+1. **Repository klonen**
+   ```bash
+   git clone https://github.com/GiuGiglio/ai-supported-data-mapping-system.git
+   cd ai-supported-data-mapping-system
+   ```
 
-Fügen Sie Ihre Supabase-Credentials hinzu:
+2. **Dependencies installieren**
+   ```bash
+   npm install
+   ```
+
+3. **Environment Variables konfigurieren**
+   
+   Erstellen Sie eine `.env.local` Datei:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
+   ```
+
+4. **Supabase Database Setup**
+   
+   Führen Sie die SQL-Skripte in Ihrer Supabase-Instanz aus:
+   ```sql
+   -- Erstellen Sie die notwendigen Tabellen
+   -- (SQL-Skripte sind im Repository verfügbar)
+   ```
+
+5. **Development Server starten**
+   ```bash
+   npm run dev
+   ```
+
+   Die Anwendung ist nun unter `http://localhost:3000` verfügbar.
+
+## 📋 Usage
+
+### 1. Datei Upload
+- Ziehen Sie eine Excel/CSV-Datei in den Upload-Bereich
+- Das System erkennt automatisch Felder und extrahiert Beschreibungen
+- Bei Duplikaten werden alle Werte zur Auswahl angezeigt
+
+### 2. Field Mapping
+- Die KI schlägt automatisch Zuordnungen vor
+- Überprüfen und anpassen Sie die Mappings nach Bedarf
+- Ändern Sie Required/Optional-Status oder entfernen Sie Felder
+- Bearbeiten Sie Quellwerte direkt in der Oberfläche
+
+### 3. Quality Dashboard
+- Überprüfen Sie die Datenqualität in der Dashboard-Ansicht
+- Filtern Sie nach verschiedenen Qualitätsstatus
+- Bearbeiten Sie Werte inline und verwalten Sie Feldtypen
+- Nutzen Sie Value Lists für konsistente Attributwerte
+
+### 4. Product Name Generation
+- Generieren Sie konsistente Produktnamen mit KI
+- Bewerten Sie die Qualität anhand des Confidence Scores
+- Kopieren Sie generierte Namen zur weiteren Verwendung
+
+## 🏗️ Architecture
+
+### Database Schema
+- **projects**: Projekt-Management und Metadaten
+- **field_mappings**: Gespeicherte Feld-Zuordnungen
+- **optional_fields**: Optionale Felder und deren Werte
+- **target_fields**: Vordefinierte Zielfeld-Definitionen
+- **value_lists**: Kontrollierte Vokabulare für Attribute
+
+### AI Integration
+- **Gemini Pro Model**: Intelligente Feldzuordnung
+- **JSON Response Parsing**: Robuste Verarbeitung von KI-Antworten
+- **Fallback Mechanisms**: Levenshtein-Distanz bei KI-Ausfall
+
+### File Processing Pipeline
+1. **Upload & Validation**: Dateityp-Erkennung und Validierung
+2. **Parsing**: Format-spezifische Datenextraktion
+3. **Field Detection**: Automatische Felderkennung und -bereinigung
+4. **Duplicate Handling**: Erkennung und Verwaltung von Duplikaten
+5. **AI Mapping**: Intelligente Feldzuordnung
+6. **Quality Assessment**: Bewertung der Datenqualität
+
+## 🔧 Configuration
+
+### Supabase Setup
+1. Erstellen Sie ein neues Supabase-Projekt
+2. Führen Sie die SQL-Migrationsskripte aus
+3. Konfigurieren Sie Row Level Security (RLS)
+4. Richten Sie File Storage Buckets ein
+
+### Gemini API Setup
+1. Erstellen Sie ein Google Cloud-Projekt
+2. Aktivieren Sie die Gemini API
+3. Generieren Sie einen API-Schlüssel
+4. Fügen Sie den Schlüssel zu Ihren Environment Variables hinzu
+
+## 🚀 Deployment
+
+### Vercel (Empfohlen)
+1. Verknüpfen Sie Ihr GitHub-Repository mit Vercel
+2. Konfigurieren Sie die Environment Variables in Vercel
+3. Deploy automatisch bei Git-Push
+
+### Environment Variables für Production
 ```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SUPABASE_URL=your_production_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_production_supabase_anon_key
+NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
 ```
-
-### 4. Entwicklungsserver starten
-```bash
-npm run dev
-```
-
-### 5. Anwendung öffnen
-```
-http://localhost:3000
-```
-
-## 🎯 Verwendung
-
-1. **Datei hochladen**: Ziehen Sie Dateien in die Drop-Zone oder klicken Sie zum Auswählen
-2. **Verarbeitung beobachten**: Der Fortschritt wird in Echtzeit angezeigt
-3. **Daten anzeigen**: Klicken Sie auf "View Data" um die verarbeiteten Daten zu sehen
-4. **Daten herunterladen**: Exportieren Sie die Daten als JSON-Datei
-5. **Backend-Speicherung**: Alle Daten werden automatisch in Supabase gespeichert
-
-## 📁 Projektstruktur
-
-```
-src/
-├── app/
-│   ├── globals.css          # Global styles
-│   ├── layout.tsx           # Root layout
-│   └── page.tsx             # Main page component
-├── components/
-│   ├── ui/
-│   │   └── button.tsx       # Reusable button component
-│   └── FileUpload.tsx       # File upload component
-├── lib/
-│   ├── supabase.ts          # Supabase client & types
-│   ├── supabase-services.ts # Database service functions
-│   └── utils.ts             # Utility functions
-├── inputs/                  # Sample input files
-│   ├── 1.xlsx              # Sample Excel file
-│   └── ...
-└── supabase/
-    └── schema.sql           # Database schema
-```
-
-## 🔧 Konfiguration
-
-### Unterstützte Dateiformate:
-- Excel (.xlsx, .xls)
-- CSV (.csv)
-- JSON (.json)
-- PDF (.pdf)
-- Text (.txt)
-
-### Dateigrößen-Limits:
-- Maximale Dateigröße: 50MB
-- Mehrere Dateien gleichzeitig möglich
-
-### Supabase-Konfiguration:
-- PostgreSQL-Datenbank mit Row Level Security
-- Supabase Storage für Datei-Uploads
-- Supabase Auth für Benutzerauthentifizierung
-- Real-time Subscriptions für Live-Updates
 
 ## 🧪 Testing
 
-Die Anwendung kann mit den bereitgestellten Sample-Dateien getestet werden:
-
-1. **Excel-Datei testen**: Verwenden Sie `src/inputs/1.xlsx`
-2. **Verschiedene Formate**: Testen Sie CSV, JSON und andere Formate
-3. **Error Cases**: Versuchen Sie nicht unterstützte Dateitypen
-4. **Backend-Test**: Überprüfen Sie die Datenbank-Einträge in Supabase
-
-## 🚀 Deployment auf Vercel
-
-### 1. Vercel Setup
-1. Gehen Sie zu [vercel.com](https://vercel.com)
-2. Verbinden Sie Ihr GitHub-Repository
-3. Konfigurieren Sie die Environment-Variablen
-
-### 2. Environment-Variablen in Vercel
-Fügen Sie diese Variablen in den Vercel-Projekteinstellungen hinzu:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-
-### 3. Deployment
 ```bash
-# Automatisches Deployment bei Git Push
-git push origin main
+# Linting
+npm run lint
+
+# Type checking
+npm run build
+
+# Development server
+npm run dev
 ```
 
-## 🔮 Nächste Schritte
+## 📝 API Documentation
 
-Diese Implementierung ist die Grundlage für die weiteren User Stories:
+### AI Field Mapping Service
+```typescript
+interface FieldMappingRequest {
+  sourceFields: string[]
+  targetFields?: TargetField[]
+  fieldDescriptions?: Record<string, string>
+}
 
-- **User Story 2**: Intelligente Feld-Zuordnung mit AI
-- **User Story 3**: Datenqualitäts-Dashboard
-- **User Story 4**: Inline-Bearbeitung
-- **User Story 5**: Produktname-Generierung
+interface FieldMappingResult {
+  sourceField: string
+  targetField: string
+  confidence: number
+  reason: string
+  isRequired: boolean
+  isOptional: boolean
+}
+```
 
-## 📝 Hinweise
+### Supabase Services
+- `projectService`: Projekt-Management
+- `targetFieldService`: Zielfeld-Verwaltung
+- `valueListService`: Value List-Management
+- `fileUploadService`: Datei-Upload und -Speicherung
 
-- **PDF-Verarbeitung**: Aktuell nur Platzhalter-Implementierung
-- **AI-Integration**: Noch nicht implementiert (für User Story 2 geplant)
-- **Authentication**: Supabase Auth ist konfiguriert, aber noch nicht in der UI implementiert
+## 🤝 Contributing
 
-## 🤝 Empfehlungen für AI-Tools
+1. Fork das Repository
+2. Erstellen Sie einen Feature-Branch (`git checkout -b feature/amazing-feature`)
+3. Committen Sie Ihre Änderungen (`git commit -m 'Add amazing feature'`)
+4. Pushen Sie zum Branch (`git push origin feature/amazing-feature`)
+5. Öffnen Sie einen Pull Request
 
-Für die nächsten User Stories werden folgende AI-Tools empfohlen:
+## 📄 License
 
-1. **OpenAI GPT-4o**: Für intelligente Feld-Zuordnung und Produktname-Generierung
-2. **Anthropic Claude**: Für komplexe Datenanalyse
-3. **Google Gemini**: Für Multimodal-Input (falls PDF-Text-Extraktion benötigt wird)
+Dieses Projekt steht unter der MIT-Lizenz. Siehe `LICENSE` Datei für Details.
 
-## 🔒 Sicherheit
+## 🆘 Support
 
-- **Row Level Security (RLS)**: Implementiert für alle Tabellen
-- **User Isolation**: Benutzer können nur ihre eigenen Daten sehen
-- **File Upload Security**: Validierung und Größenbeschränkungen
-- **Environment Variables**: Sichere Konfiguration über Umgebungsvariablen
+Bei Fragen oder Problemen:
+- Öffnen Sie ein Issue im GitHub-Repository
+- Kontaktieren Sie das Entwicklungsteam
+- Konsultieren Sie die Dokumentation
 
-## 📊 Datenbank-Schema
+## 🔄 Roadmap
 
-Das System verwendet folgende Tabellen:
-- `projects`: Projekt-Informationen
-- `field_mappings`: Feld-Zuordnungen
-- `product_data`: Produktdaten
-- `value_lists`: Value-Listen für Attribute
-- `mapping_history`: Mapping-Historie für Learning
+### Geplante Features
+- [ ] Batch-Processing für mehrere Dateien
+- [ ] Advanced Data Validation Rules
+- [ ] Custom AI Model Training
+- [ ] API-Integration für externe Systeme
+- [ ] Multi-Language Support
+- [ ] Advanced Analytics Dashboard
+
+### Verbesserungen
+- [ ] Performance-Optimierungen für große Dateien
+- [ ] Enhanced Error Handling
+- [ ] Improved UI/UX
+- [ ] Mobile Responsiveness
+- [ ] Accessibility Improvements
 
 ---
-
-**Status**: ✅ User Story 1 vollständig implementiert mit Supabase Backend 
