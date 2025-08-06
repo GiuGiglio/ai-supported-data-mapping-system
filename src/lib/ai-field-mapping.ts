@@ -137,31 +137,152 @@ export class AIFieldMappingService {
       
       console.log('📝 Gemini response text:', responseText)
       
-      // Parse JSON from response with error handling
+      // Parse JSON from response with enhanced error handling
       let aiResult
+      let jsonText = responseText.trim() // Define outside try-catch for error handling
+      
       try {
         // Sometimes Gemini returns text with code blocks, extract JSON
-        let jsonText = responseText.trim()
         
-        // Remove markdown code blocks if present
+        console.log('🔍 Processing Gemini response text (length: ' + jsonText.length + '):', jsonText.substring(0, 200) + '...')
+        
+        // Remove markdown code blocks if present (handle incomplete blocks)
         if (jsonText.includes('```json')) {
-          const jsonMatch = jsonText.match(/```json\s*(.*?)\s*```/s)
-          if (jsonMatch) {
-            jsonText = jsonMatch[1]
+          console.log('📦 Extracting JSON from ```json``` code block')
+          
+          // Try complete code block first
+          let jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/i)
+          if (jsonMatch && jsonMatch[1]) {
+            jsonText = jsonMatch[1].trim()
+            console.log('✂️ Extracted JSON from complete code block (length: ' + jsonText.length + ')')
+          } else {
+            // Handle incomplete code block (missing closing ```)
+            console.log('🔧 Incomplete code block detected - extracting from ```json to end')
+            const startMatch = jsonText.match(/```json\s*([\s\S]*)/i)
+            if (startMatch && startMatch[1]) {
+              jsonText = startMatch[1].trim()
+              console.log('✂️ Extracted JSON from incomplete code block (length: ' + jsonText.length + ')')
+            } else {
+              console.warn('⚠️ Found ```json``` but failed to extract any content')
+            }
           }
         } else if (jsonText.includes('```')) {
-          const jsonMatch = jsonText.match(/```\s*(.*?)\s*```/s)
-          if (jsonMatch) {
-            jsonText = jsonMatch[1]
+          console.log('📦 Extracting JSON from ``` code block')
+          
+          // Try complete code block first
+          let jsonMatch = jsonText.match(/```\s*([\s\S]*?)\s*```/)
+          if (jsonMatch && jsonMatch[1]) {
+            jsonText = jsonMatch[1].trim()
+            console.log('✂️ Extracted JSON from complete code block (length: ' + jsonText.length + ')')
+          } else {
+            // Handle incomplete code block (missing closing ```)
+            console.log('🔧 Incomplete code block detected - extracting from ``` to end')
+            const startMatch = jsonText.match(/```\s*([\s\S]*)/i)
+            if (startMatch && startMatch[1]) {
+              jsonText = startMatch[1].trim()
+              console.log('✂️ Extracted JSON from incomplete code block (length: ' + jsonText.length + ')')
+            } else {
+              console.warn('⚠️ Found ``` but failed to extract any content')
+            }
           }
         }
         
-        aiResult = JSON.parse(jsonText)
-        console.log('🎯 Parsed AI result:', aiResult)
+        // Try to find JSON object boundaries if no code blocks
+        if (jsonText && !jsonText.startsWith('{') && jsonText.includes('{')) {
+          console.log('🔍 Looking for JSON object boundaries')
+          const startIndex = jsonText.indexOf('{')
+          const endIndex = jsonText.lastIndexOf('}')
+          if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+            jsonText = jsonText.substring(startIndex, endIndex + 1)
+            console.log('🎯 Extracted JSON object:', jsonText.substring(0, 200) + '...')
+          }
+        }
+        
+        // Safety check: ensure jsonText is valid
+        if (!jsonText || jsonText.trim() === '') {
+          console.error('🚨 No valid JSON text found after all extraction attempts')
+          console.log('📋 Original response text:', responseText)
+          throw new Error('No valid JSON found in Gemini response')
+        }
+        
+        console.log('🧪 Attempting to parse JSON text (length: ' + jsonText.length + ')')
+        
+        // Try to repair incomplete JSON if needed
+        let repairedJsonText = jsonText
+        const trimmedJson = jsonText.trim()
+        
+        // Check if JSON needs repair
+        const needsRepair = !trimmedJson.endsWith('}') || 
+                           trimmedJson.endsWith('},') || 
+                           !trimmedJson.includes('"mappings"')
+        
+        if (needsRepair) {
+          console.log('🔧 JSON needs repair - analyzing structure...')
+          console.log('🔍 JSON ends with:', trimmedJson.substring(trimmedJson.length - 20))
+          
+          // Strategy 1: Remove trailing comma and close structure properly
+          if (trimmedJson.endsWith('},')) {
+            console.log('🔧 Removing trailing comma and closing structure...')
+            repairedJsonText = trimmedJson.substring(0, trimmedJson.length - 1) + '\n  ]\n}'
+          }
+          // Strategy 2: Find last complete mapping and truncate there
+          else if (jsonText.includes('"mappings":')) {
+            console.log('🔧 Finding last complete mapping...')
+            
+            // Find all complete mapping objects (those that end with })
+            const mappingPattern = /\{\s*"sourceField":[^}]+\}/g
+            const completeMatches = Array.from(jsonText.matchAll(mappingPattern))
+            
+            if (completeMatches.length > 0) {
+              const lastMatch = completeMatches[completeMatches.length - 1]
+              const lastCompleteIndex = lastMatch.index! + lastMatch[0].length
+              
+              // Extract up to the last complete mapping
+              const upToLastComplete = jsonText.substring(0, lastCompleteIndex)
+              repairedJsonText = upToLastComplete + '\n  ]\n}'
+              
+              console.log(`🔧 Found ${completeMatches.length} complete mappings, truncating after last one`)
+            }
+          }
+          // Strategy 3: Basic structure repair
+          else {
+            console.log('🔧 Basic structure repair...')
+            // Ensure it has the basic structure
+            if (!jsonText.includes('"mappings":')) {
+              repairedJsonText = '{"mappings":[]}'
+            } else {
+              // Try to close whatever structure we have
+              repairedJsonText = jsonText.replace(/,\s*$/, '') + '\n  ]\n}'
+            }
+          }
+          
+          console.log('🔧 Repaired JSON text (last 150 chars):', repairedJsonText.substring(Math.max(0, repairedJsonText.length - 150)))
+        }
+        
+        aiResult = JSON.parse(repairedJsonText)
+        console.log('✅ Successfully parsed AI result:', aiResult)
       } catch (parseError) {
         console.error('❌ Failed to parse Gemini JSON response:', parseError)
-        console.log('Raw response text:', responseText)
-        throw new Error('Invalid JSON response from Gemini API')
+        console.log('📄 Full raw response text:', responseText)
+        console.log('🔧 Attempted JSON text:', jsonText || 'undefined')
+        console.log('🔍 Response text starts with:', responseText.substring(0, 50))
+        console.log('🔍 Response text ends with:', responseText.substring(responseText.length - 50))
+        
+        // Try to extract just the mappings array if it exists
+        const mappingsMatch = responseText.match(/"mappings"\s*:\s*\[(.*?)\]/s)
+        if (mappingsMatch) {
+          console.log('🔄 Attempting to extract mappings array directly')
+          try {
+            const mappingsOnly = '{"mappings":[' + mappingsMatch[1] + ']}'
+            aiResult = JSON.parse(mappingsOnly)
+            console.log('✅ Successfully parsed mappings-only JSON:', aiResult)
+          } catch (mappingsError) {
+            console.error('❌ Failed to parse mappings-only JSON:', mappingsError)
+            throw new Error('Invalid JSON response from Gemini API')
+          }
+        } else {
+          throw new Error('Invalid JSON response from Gemini API')
+        }
       }
       
       const finalMappings = this.parseAIResponse(aiResult, request.sourceFields, request.targetFields)

@@ -61,6 +61,15 @@ const detectExcelTemplate = (data: any[]): boolean => {
      value.includes('Product') || value.includes('Weight') || value.includes('Description'))
   )
   
+  // Pattern 3: Check if data is transposed (vertical layout with "Important Initial Data")
+  const isTransposedData = data.some(row => 
+    Object.keys(row).some(key => key.includes('Important Initial Data'))
+  )
+  
+  console.log('🔍 Additional detection patterns:', {
+    isTransposedData
+  })
+  
   // Pattern 2: Look for description rows (Row 6-7)
   const hasDescriptionRows = data.length >= 6 && 
     Object.values(data[4] || {}).some(value => 
@@ -75,7 +84,120 @@ const detectExcelTemplate = (data: any[]): boolean => {
     rowCount: data.length
   })
   
-  return (hasFieldNamesInRow2 || hasDescriptionRows) && data.length >= 3
+  return (hasFieldNamesInRow2 || hasDescriptionRows || isTransposedData) && data.length >= 3
+}
+
+// Helper function to parse transposed Excel template (vertical layout)
+const parseTransposedExcelTemplate = (data: any[]): { processedData: any[], fieldDescriptions: Record<string, string> } => {
+  console.log('📋 Parsing transposed Excel template...')
+  
+  // In transposed format, each row represents a field-value pair
+  // Row structure: { "Important Initial Data": "Article Number/SKU" }
+  //                { "Important Initial Data": "WETA860104342" }
+  //                { "Important Initial Data": "Beschreibung" }
+  //                { "Important Initial Data": "Herstellerkürzel + SKU ohne Bindestriche" }
+  
+  const fieldValuePairs: string[] = []
+  
+  // Extract all values from the "Important Initial Data" column
+  data.forEach((row, index) => {
+    const value = row['Important Initial Data']
+    if (value && typeof value === 'string' && value.trim() !== '') {
+      fieldValuePairs.push(value.trim())
+      console.log(`Row ${index + 1}: "${value}"`)
+    }
+  })
+  
+  console.log('📊 Extracted field-value pairs:', fieldValuePairs)
+  
+  // Parse the pattern: field name followed by field value
+  const processedData = []
+  const fieldDescriptions: Record<string, string> = {}
+  
+  let currentFieldName = ''
+  let currentFieldValue = ''
+  let isInDescriptionSection = false
+  
+  for (let i = 0; i < fieldValuePairs.length; i++) {
+    const value = fieldValuePairs[i]
+    
+    // Check if this is a field name (contains typical field indicators)
+    const isFieldName = value.includes('Number') || value.includes('GTIN') || value.includes('Product') || 
+                       value.includes('Weight') || value.includes('Description') || value.includes('Portal') ||
+                       value.includes('Price') || value.includes('Category') || value.includes('Brand')
+    
+    // Check if we're entering description section
+    if (value.toLowerCase().includes('beschreibung')) {
+      isInDescriptionSection = true
+      continue
+    }
+    
+    if (isFieldName && !isInDescriptionSection) {
+      // This is a field name, next value should be the data
+      currentFieldName = value
+      if (i + 1 < fieldValuePairs.length) {
+        currentFieldValue = fieldValuePairs[i + 1]
+        console.log(`📋 Field mapping: "${currentFieldName}" = "${currentFieldValue}"`)
+        // Skip the next value since we've used it
+        i++
+      }
+    } else if (isInDescriptionSection && currentFieldName) {
+      // This is a description for the current field
+      fieldDescriptions[currentFieldName] = value
+      console.log(`📚 Field description: "${currentFieldName}" = "${value}"`)
+    }
+  }
+  
+  // Create a single data row with all field mappings
+  const dataRow: any = {}
+  
+  // Parse all field-value pairs systematically
+  for (let i = 0; i < fieldValuePairs.length; i++) {
+    const value = fieldValuePairs[i]
+    
+    // Skip description section marker
+    if (value.toLowerCase().includes('beschreibung')) {
+      break // Stop processing when we hit description section
+    }
+    
+    // Check if this is a field name
+    const isFieldName = value.includes('Number') || value.includes('GTIN') || value.includes('Product') || 
+                       value.includes('Weight') || value.includes('Description') || value.includes('Portal') ||
+                       value.includes('Price') || value.includes('Category') || value.includes('Brand') ||
+                       value.includes('Name') || value.includes('SKU') || value.includes('EAN') ||
+                       value.includes('Barcode') || value.includes('Manufacturer') || value.includes('Producer')
+    
+    if (isFieldName && i + 1 < fieldValuePairs.length) {
+      const nextValue = fieldValuePairs[i + 1]
+      
+      // Check if next value is NOT another field name (i.e., it's the data value)
+      const nextIsFieldName = nextValue.includes('Number') || nextValue.includes('GTIN') || nextValue.includes('Product') || 
+                             nextValue.includes('Weight') || nextValue.includes('Description') || nextValue.includes('Portal') ||
+                             nextValue.includes('Price') || nextValue.includes('Category') || nextValue.includes('Brand') ||
+                             nextValue.includes('Name') || nextValue.includes('SKU') || nextValue.includes('EAN') ||
+                             nextValue.includes('Barcode') || nextValue.includes('Manufacturer') || nextValue.includes('Producer')
+      
+      if (!nextIsFieldName && !nextValue.toLowerCase().includes('beschreibung')) {
+        // This is a field-value pair
+        dataRow[value] = nextValue
+        console.log(`📋 Field mapping: "${value}" = "${nextValue}"`)
+        i++ // Skip the value we just processed
+      }
+    }
+  }
+  
+  if (Object.keys(dataRow).length > 0) {
+    processedData.push(dataRow)
+  }
+  
+  console.log('🎉 Transposed template parsing completed:')
+  console.log('  - Data rows:', processedData.length)
+  console.log('  - Field descriptions:', Object.keys(fieldDescriptions).length)
+  if (processedData.length > 0) {
+    console.log('📋 Sample processed row:', processedData[0])
+  }
+  
+  return { processedData, fieldDescriptions }
 }
 
 // Helper function to parse Excel template format (enhanced for complex structure)
@@ -85,6 +207,16 @@ const parseExcelTemplate = (data: any[]): { processedData: any[], fieldDescripti
   if (data.length < 3) {
     console.warn('⚠️ Template needs at least 3 rows')
     return { processedData: data, fieldDescriptions: {} }
+  }
+  
+  // Check if this is transposed data (vertical layout)
+  const isTransposed = data.some(row => 
+    Object.keys(row).some(key => key.includes('Important Initial Data'))
+  )
+  
+  if (isTransposed) {
+    console.log('🔄 Detected transposed data - converting to horizontal format...')
+    return parseTransposedExcelTemplate(data)
   }
   
   // Enhanced structure:
@@ -189,6 +321,15 @@ const cleanExcelData = (data: any[]): { cleanedData: any[], fieldDescriptions?: 
   console.log('🧹 Cleaning Excel data:', data.length, 'rows')
   console.log('🔍 Sample raw row:', data[0])
   
+  // Check if field descriptions were stored during XLSX parsing fix
+  const storedFieldDescriptions = (data as any)._fieldDescriptions
+  if (storedFieldDescriptions) {
+    console.log('📚 Found stored field descriptions from XLSX parsing:', storedFieldDescriptions)
+    // Clean the data and return with stored descriptions
+    delete (data as any)._fieldDescriptions // Remove the temporary property
+    return { cleanedData: data, fieldDescriptions: storedFieldDescriptions }
+  }
+  
   // Check if this is a template format
   if (detectExcelTemplate(data)) {
     const { processedData, fieldDescriptions } = parseExcelTemplate(data)
@@ -278,11 +419,116 @@ export function FileUpload({ onFileProcessed }: FileUploadProps) {
             console.log('📋 Sheet name:', sheetName)
             
             // Convert with better options to avoid empty column issues
+            // First try: Standard conversion
             jsonData = XLSX.utils.sheet_to_json(worksheet, { 
               defval: '',
               blankrows: false,
               raw: false
             })
+            
+            // Check if we got the "Important Initial Data" problem (XLSX parsing issue)
+            const hasImportantInitialData = jsonData.some(row => 
+              Object.keys(row).some(key => key.includes('Important Initial Data'))
+            )
+            
+            if (hasImportantInitialData) {
+              console.log('🔧 Detected XLSX parsing issue - trying alternative parsing...')
+              
+              // Alternative parsing: Use sheet_to_json without headers, then manually structure
+              const rawData = XLSX.utils.sheet_to_json(worksheet, { 
+                header: 1, // Use array format instead of object format
+                defval: '',
+                blankrows: false,
+                raw: false
+              })
+              
+              console.log('📊 Raw sheet data (first 8 rows):', rawData.slice(0, 8))
+              
+              // Manual parsing based on your structure:
+              // Row 1: empty, Row 2: field names, Row 3: values, Row 4: empty, Row 5-7: descriptions
+              if (rawData.length >= 3) {
+                const fieldNamesRow = rawData[1] // Row 2 (index 1) - field names
+                const valuesRow = rawData[2]     // Row 3 (index 2) - values
+                
+                console.log('🏷️ Field names row:', fieldNamesRow)
+                console.log('📊 Values row:', valuesRow)
+                
+                // Create proper object structure
+                const properData: any = {}
+                
+                if (fieldNamesRow && valuesRow) {
+                  fieldNamesRow.forEach((fieldName: string, index: number) => {
+                    if (fieldName && fieldName.trim() !== '' && index < valuesRow.length) {
+                      const value = valuesRow[index]
+                      if (value !== null && value !== undefined) {
+                        properData[fieldName.trim()] = value
+                      }
+                    }
+                  })
+                }
+                
+                console.log('✅ Reconstructed proper data structure:', properData)
+                
+                // Extract field descriptions from rows 6-7 (index 5-6) - only for specific templates
+                const fieldDescriptions: Record<string, string> = {}
+                
+                // Check if this file has the template structure with descriptions
+                // Look for "Beschreibung" marker in row 5 (index 4)
+                const hasDescriptionMarker = rawData.length >= 5 && 
+                  rawData[4] && 
+                  rawData[4].some((cell: any) => 
+                    cell && typeof cell === 'string' && cell.toLowerCase().includes('beschreibung')
+                  )
+                
+                if (hasDescriptionMarker && rawData.length >= 6) {
+                  console.log('📝 Found template with descriptions - extracting field descriptions from rows 6-7...')
+                  
+                  // Row 6 (index 5) and Row 7 (index 6) contain descriptions
+                  const descRow1 = rawData[5] || []
+                  const descRow2 = rawData[6] || []
+                  
+                  console.log('📚 Description row 6:', descRow1)
+                  console.log('📚 Description row 7:', descRow2)
+                  
+                  // Map descriptions to field names by column position
+                  fieldNamesRow.forEach((fieldName: string, index: number) => {
+                    if (fieldName && fieldName.trim() !== '') {
+                      let description = ''
+                      
+                      // Get description from row 6
+                      if (index < descRow1.length && descRow1[index]) {
+                        description += String(descRow1[index]).trim()
+                      }
+                      
+                      // Add description from row 7 if exists
+                      if (index < descRow2.length && descRow2[index]) {
+                        if (description) description += ' '
+                        description += String(descRow2[index]).trim()
+                      }
+                      
+                      if (description) {
+                        fieldDescriptions[fieldName.trim()] = description
+                        console.log(`📚 Field description: "${fieldName}" = "${description}"`)
+                      }
+                    }
+                  })
+                } else {
+                  console.log('ℹ️ No description template detected - skipping field descriptions extraction')
+                }
+                
+                // Replace the problematic data with properly structured data
+                if (Object.keys(properData).length > 0) {
+                  jsonData = [properData]
+                  
+                  // Store field descriptions for later use
+                  if (Object.keys(fieldDescriptions).length > 0) {
+                    console.log('💾 Storing field descriptions for AI training:', fieldDescriptions)
+                    // We'll need to pass this to the template parser
+                    ;(jsonData as any)._fieldDescriptions = fieldDescriptions
+                  }
+                }
+              }
+            }
             
             console.log('🔍 Raw Excel data (first 3 rows):', jsonData.slice(0, 3))
             console.log('🏷️ Original headers:', Object.keys(jsonData[0] || {}))
